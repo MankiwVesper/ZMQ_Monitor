@@ -1,0 +1,493 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="14766383-885e-483e-872a-f1f4a81178c2" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ZMQMonitor_1.py" beforeDir="false" afterPath="$PROJECT_DIR$/ZMQMonitor_1.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ZMQPoint.json" beforeDir="false" afterPath="$PROJECT_DIR$/ZMQPoint.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test.py" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
+  <component name="ProjectId" id="2jfdChkjp0Qz4OnOwrh75fiV9P8" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatOrder0&quot;: &quot;0&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatOrder1&quot;: &quot;1&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatOrder2&quot;: &quot;2&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatOrder3&quot;: &quot;3&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatOrder4&quot;: &quot;4&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatOrder5&quot;: &quot;5&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatWidth0&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatWidth1&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatWidth2&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatWidth3&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatWidth4&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_flatWidth5&quot;: &quot;300&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeOrder0&quot;: &quot;0&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeOrder1&quot;: &quot;1&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeOrder2&quot;: &quot;2&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeOrder3&quot;: &quot;3&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeOrder4&quot;: &quot;4&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeOrder5&quot;: &quot;5&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeWidth0&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeWidth1&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeWidth2&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeWidth3&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeWidth4&quot;: &quot;301&quot;,
+    &quot;FileHistory.org.jetbrains.idea.svn.history.SvnHistoryProvider_treeWidth5&quot;: &quot;300&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/jw/Desktop/ZMQMonitor&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settings.ide.settings.uml&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\jw\Desktop\ZMQMonitor" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python.ZMQMonitor_1">
+    <configuration name="ZMQMonitor" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="ZMQMonitor" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/ZMQMonitor.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="true" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="ZMQMonitor_1" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="ZMQMonitor" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/ZMQMonitor_1.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="true" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="ZMQSub" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="ZMQMonitor" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/ZMQSub.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="ZMQSub11" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="ZMQMonitor" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="C:\Users\jw\Desktop\ZMQMonitor\ZMQSub11.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="PythonConfigurationType" factoryName="Python">
+      <module name="ZMQMonitor" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="test" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="ZMQMonitor" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/test.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="true" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.ZMQSub" />
+      <item itemvalue="Python.ZMQSub11" />
+      <item itemvalue="Python.ZMQMonitor_1" />
+      <item itemvalue="Python.test" />
+      <item itemvalue="Python.ZMQMonitor" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.ZMQMonitor_1" />
+        <item itemvalue="Python.ZMQMonitor" />
+        <item itemvalue="Python.ZMQSub" />
+        <item itemvalue="Python.ZMQSub11" />
+        <item itemvalue="Python.test" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="应用程序级" UseSingleDictionary="true" transferred="true" />
+  <component name="SvnConfiguration" cleanupOnStartRun="true">
+    <configuration>C:\Users\jw\AppData\Roaming\Subversion</configuration>
+    <supportedVersion>125</supportedVersion>
+  </component>
+  <component name="SvnFileUrlMappingImpl">
+    <option name="myMappingRoots">
+      <list>
+        <SvnCopyRootSimple>
+          <option name="myVcsRoot" value="C:\Users\jw\Desktop\ZMQMonitor" />
+          <option name="myCopyRoot" value="C:\Users\jw\Desktop\ZMQMonitor" />
+        </SvnCopyRootSimple>
+      </list>
+    </option>
+    <option name="myMoreRealMappingRoots">
+      <list>
+        <SvnCopyRootSimple>
+          <option name="myVcsRoot" value="C:\Users\jw\Desktop\ZMQMonitor" />
+          <option name="myCopyRoot" value="C:\Users\jw\Desktop\ZMQMonitor" />
+        </SvnCopyRootSimple>
+      </list>
+    </option>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="14766383-885e-483e-872a-f1f4a81178c2" name="更改" comment="" />
+      <created>1682217721707</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1682217721707</updated>
+      <workItem from="1721781943746" duration="3418000" />
+      <workItem from="1721868042056" duration="23830000" />
+      <workItem from="1721954492547" duration="3720000" />
+      <workItem from="1721964149527" duration="14312000" />
+      <workItem from="1722213902844" duration="25205000" />
+      <workItem from="1722300340615" duration="23407000" />
+      <workItem from="1722394725707" duration="15215000" />
+      <workItem from="1722473091304" duration="9009000" />
+      <workItem from="1722560219389" duration="3257000" />
+      <workItem from="1722584062619" duration="1979000" />
+      <workItem from="1722819586173" duration="14837000" />
+      <workItem from="1722904849206" duration="14495000" />
+      <workItem from="1722991168956" duration="10219000" />
+      <workItem from="1723099861426" duration="7790000" />
+      <workItem from="1723164113432" duration="20607000" />
+      <workItem from="1723253058815" duration="19514000" />
+      <workItem from="1723423292024" duration="8038000" />
+      <workItem from="1723520121258" duration="13378000" />
+      <workItem from="1723596034139" duration="17474000" />
+      <workItem from="1723682867893" duration="20595000" />
+      <workItem from="1723769135937" duration="9149000" />
+      <workItem from="1724029254801" duration="22309000" />
+      <workItem from="1724116717231" duration="11974000" />
+      <workItem from="1724201949681" duration="4876000" />
+      <workItem from="1724287259154" duration="7129000" />
+      <workItem from="1724312898786" duration="3936000" />
+      <workItem from="1724392762464" duration="10797000" />
+      <workItem from="1724636599775" duration="18472000" />
+      <workItem from="1724719187920" duration="15552000" />
+    </task>
+    <task id="LOCAL-00001" summary="保存该节点">
+      <created>1722820539907</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1722820539907</updated>
+    </task>
+    <task id="LOCAL-00002" summary="开始调试线程池监控多个ZMQ节点的数据,目前意见可以监听多个节点">
+      <created>1722842132889</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1722842132889</updated>
+    </task>
+    <task id="LOCAL-00003" summary="修改 ZMQSubscriber 的属性名称构造函数的写法">
+      <created>1722904960817</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1722904960817</updated>
+    </task>
+    <task id="LOCAL-00004" summary="修改类中属性的名称">
+      <created>1722932796348</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1722932796348</updated>
+    </task>
+    <task id="LOCAL-00005" summary="新增一个类 ZMQSuber，根据传递的ZMQ节点信息创建订阅数据的子线程并启动">
+      <created>1723103665195</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1723103665195</updated>
+    </task>
+    <task id="LOCAL-00006" summary="实现了通过复选框控制数据订阅的功能">
+      <created>1723181246519</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1723181246519</updated>
+    </task>
+    <task id="LOCAL-00007" summary="修改控制是否订阅的标志位">
+      <created>1723432975804</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1723432975804</updated>
+    </task>
+    <task id="LOCAL-00008" summary="首次提交">
+      <created>1723433006966</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1723433006966</updated>
+    </task>
+    <task id="LOCAL-00009" summary="修改格式">
+      <created>1723453738518</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1723453738518</updated>
+    </task>
+    <task id="LOCAL-00010" summary="实现了通过复选框勾选来控制是否订阅数据、和 重置订阅 的功能">
+      <created>1723529012356</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1723529012356</updated>
+    </task>
+    <task id="LOCAL-00011" summary="调整【重置订阅】的功能">
+      <created>1723535289208</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1723535289208</updated>
+    </task>
+    <task id="LOCAL-00012" summary="新增显示订阅数据的ZMQ节点地址">
+      <created>1723536511193</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1723536511193</updated>
+    </task>
+    <task id="LOCAL-00013" summary="给解析多帧数据添加了一个右键菜单和对话框">
+      <created>1723616146705</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1723616146705</updated>
+    </task>
+    <task id="LOCAL-00014" summary="1. 修改了GUI界面文件的名称；&#10;2. 修改了显示数据的第二列的对其方式">
+      <created>1723617866140</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1723617866140</updated>
+    </task>
+    <task id="LOCAL-00015" summary="1. 修改了GUI界面文件的名称；&#10;2. 修改了显示数据的第二列的对其方式">
+      <created>1723709599221</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1723709599221</updated>
+    </task>
+    <task id="LOCAL-00016" summary="1. 完成订阅功能的实现">
+      <created>1724141176815</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1724141176815</updated>
+    </task>
+    <task id="LOCAL-00017" summary="1. 新增过滤功能">
+      <created>1724403518265</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1724403518265</updated>
+    </task>
+    <task id="LOCAL-00018" summary="给ZMQ接收数据设置超时时间为 1秒，解决没有数据时接收数据的子线程卡死的问题">
+      <created>1724641240849</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1724641240849</updated>
+    </task>
+    <task id="LOCAL-00019" summary="1. 修改添加节点的方式：初始化时的节点单元格默认不处于可编辑状态，只有通过点击 新增节点的按钮增加的节点其地址单元格处于正在编辑的状态&#10;2. 修改删除节点的方式，原先的方案太复杂，提示不准确&#10;3. 新增 窗口居于屏幕正中&#10;4. 修改zmq接收数据的超时时间为2秒">
+      <created>1724656374152</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1724656374152</updated>
+    </task>
+    <task id="LOCAL-00020" summary="1. 新增了4个label、2个combox，用来设置用来缓存数据的队列大小 和 ZMQ接收总线数据的超时时间。同时增加了显示提示信息的位置&#10;2. 增加了缓存大小和超时时间在界面状态栏的解释信息">
+      <created>1724659556546</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1724659556546</updated>
+    </task>
+    <task id="LOCAL-00021" summary="1. 用户通过界面可以设置缓冲大小和超时时间">
+      <created>1724662131708</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1724662131708</updated>
+    </task>
+    <task id="LOCAL-00022" summary="1. 修改默认显示的超时时间为2.0秒">
+      <created>1724662361904</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1724662361904</updated>
+    </task>
+    <task id="LOCAL-00023" summary="1. 同步上传备份">
+      <created>1724662421321</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1724662421321</updated>
+    </task>
+    <task id="LOCAL-00024" summary="优化文件结构">
+      <created>1724740709354</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1724740709354</updated>
+    </task>
+    <option name="localTasksCounter" value="25" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="保存该节点" />
+    <MESSAGE value="开始调试线程池监控多个ZMQ节点的数据,目前意见可以监听多个节点" />
+    <MESSAGE value="修改 ZMQSubscriber 的属性名称构造函数的写法" />
+    <MESSAGE value="修改类中属性的名称" />
+    <MESSAGE value="新增一个类 ZMQSuber，根据传递的ZMQ节点信息创建订阅数据的子线程并启动" />
+    <MESSAGE value="实现了通过复选框控制数据订阅的功能" />
+    <MESSAGE value="修改控制是否订阅的标志位" />
+    <MESSAGE value="首次提交" />
+    <MESSAGE value="修改格式" />
+    <MESSAGE value="实现了通过复选框勾选来控制是否订阅数据、和 重置订阅 的功能" />
+    <MESSAGE value="调整【重置订阅】的功能" />
+    <MESSAGE value="新增显示订阅数据的ZMQ节点地址" />
+    <MESSAGE value="给解析多帧数据添加了一个右键菜单和对话框" />
+    <MESSAGE value="1. 修改了GUI界面文件的名称；&#10;2. 修改了显示数据的第二列的对其方式" />
+    <MESSAGE value="1. 完成订阅功能的实现" />
+    <MESSAGE value="1. 新增过滤功能" />
+    <MESSAGE value="给ZMQ接收数据设置超时时间为 1秒，解决没有数据时接收数据的子线程卡死的问题" />
+    <MESSAGE value="1. 修改添加节点的方式：初始化时的节点单元格默认不处于可编辑状态，只有通过点击 新增节点的按钮增加的节点其地址单元格处于正在编辑的状态&#10;2. 修改删除节点的方式，原先的方案太复杂，提示不准确&#10;3. 新增 窗口居于屏幕正中&#10;4. 修改zmq接收数据的超时时间为2秒" />
+    <MESSAGE value="1. 新增了4个label、2个combox，用来设置用来缓存数据的队列大小 和 ZMQ接收总线数据的超时时间。同时增加了显示提示信息的位置&#10;2. 增加了缓存大小和超时时间在界面状态栏的解释信息" />
+    <MESSAGE value="1. 用户通过界面可以设置缓冲大小和超时时间" />
+    <MESSAGE value="1. 修改默认显示的超时时间为2.0秒" />
+    <MESSAGE value="1. 同步上传备份" />
+    <MESSAGE value="优化文件结构" />
+    <option name="LAST_COMMIT_MESSAGE" value="优化文件结构" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/ZMQMonitor$GUI.coverage" NAME="GUI 覆盖结果" MODIFIED="1722331102881" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ZMQMonitor$ZMQMonitor.coverage" NAME="ZMQMonitor 覆盖结果" MODIFIED="1724740718151" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ZMQMonitor$ZMQMonitor_1.coverage" NAME="ZMQMonitor_1 覆盖结果" MODIFIED="1724740793116" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ZMQMonitor$test.coverage" NAME="test 覆盖结果" MODIFIED="1722563091833" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ZMQMonitor$ZMQSub.coverage" NAME="ZMQSub 覆盖结果" MODIFIED="1723191788418" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+  </component>
+</project>

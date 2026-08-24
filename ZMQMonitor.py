@@ -1,0 +1,1294 @@
+# -*- coding: utf-8 -*-
+
+import psutil
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QAbstractTableModel, QModelIndex, QThread, QTimer
+from PyQt5.QtGui import QFont, QKeySequence, QIntValidator
+from PyQt5.QtWidgets import QApplication, QMainWindow, QHeaderView, QMenu, QAction, QShortcut, \
+    QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, QCheckBox, \
+    QLabel, QWidget, QHBoxLayout, QPushButton, QRadioButton
+
+import ZMQSub
+from DataTransform import *
+from ZMQConfig import *
+from ZMQMonitorGUI import *
+from ZMQSub import *
+from log_setting import get_logger
+
+zmq_monitor_logger = get_logger("ZMQMonitor", "./log")
+
+
+class SystemInfo(QObject):
+    cache_info = pyqtSignal(str, int)  # 更新提示信息的信号
+    memory_usage = pyqtSignal(str, str, str, str)  # 内存使用数据，级别，本软件使用的内存，系统的剩余内存，系统总内存
+    cpu_usage = pyqtSignal(str, str, str)  # CUP使用情况，级别，本软件使用的CPU，系统总的CPU使用
+    warning_signal = pyqtSignal(str, str)  # 告警信号，级别，告警内容
+
+    def __init__(self):
+        super().__init__()
+        self.process_name = os.path.basename(sys.argv[0])
+        self.process_id = psutil.Process(os.getpid())
+
+    def start_monitoring_win(self, interval=1000):
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.get_systime_info_win)
+        self.timer.start(interval)
+
+    def start_monitoring_linux(self, interval=1000):
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.get_systime_info_linux)
+        self.timer.start(interval)
+
+    def get_systime_info_win(self):
+        """获取Windows系统的信息"""
+        self.get_cpu_info_win()
+        self.get_memory_info_win()
+        self.get_cache_percent()
+
+    def get_systime_info_linux(self):
+        """获取Linux系统的信息"""
+        self.get_cpu_info_linux()
+        self.get_memory_info_linux()
+        self.get_cache_percent()
+
+    def get_cache_percent(self):
+        """监控保存ZMQ数据的缓存队列的使用情况"""
+        cache_percent = int(len(ZMQSub.data_deque) / ZMQSub.data_deque.maxlen * 100)
+
+        if cache_percent <= 60:
+            self.cache_info.emit('Green', cache_percent)
+        elif 60 < cache_percent <= 80:
+            self.cache_info.emit('OrangeRed', cache_percent)
+        else:
+            self.cache_info.emit('Red', cache_percent)
+
+    def get_cpu_info_win(self):
+        """获取软件的CPU使用情况和整个系统的CPU使用情况，适用于Windows系统"""
+
+        # BUG：在windows10 系统下，实际观察发现 psutil 获得的数值与资源管理器中的数值不一致，该数值仅供参考
+        #  而在 windows 7 系统下，获取的值基本上和任务管理器 一致，不需要修正
+        total_cpu_usage = psutil.cpu_percent(interval=None) + 1.0 * psutil.cpu_count()  # 修正
+        process_cpu_usage = self.process_id.cpu_percent(interval=None) / psutil.cpu_count() + 1.0 * psutil.cpu_count()  # 修正
+
+        if total_cpu_usage > 80.0 or process_cpu_usage > 30.0:
+            self.cpu_usage.emit("Red", f'{process_cpu_usage:.2f}', f'{total_cpu_usage:.2f}')
+            self.warning_signal.emit("Red", 'CPU使用率偏高，请注意！')
+        else:
+            self.cpu_usage.emit("Black", f'{process_cpu_usage:.2f}', f'{total_cpu_usage:.2f}')
+
+    def get_cpu_info_linux(self):
+        """获取软件的CPU使用情况和整个系统的CPU使用情况，适用于Linux系统"""
+        pass
+
+    def get_memory_info_win(self):
+        """获取软件的内存使用情况和整个系统的内存使用情况，适用于Windows系统"""
+        # total_memory_command = ['wmic', 'OS', 'get', 'TotalVisibleMemorySize']
+        # free_memory_command = ['wmic', 'OS', 'get', 'FreePhysicalMemory']
+        # process_memory_command = ['wmic', 'process', 'where', f"name='{self.process_name}'", 'get', 'WorkingSetSize']
+
+        # total_memory_info, _ = subprocess.Popen(total_memory_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True,
+        #                                             creationflags=subprocess.CREATE_NO_WINDOW).communicate()
+        # free_memory_info, _ = subprocess.Popen(free_memory_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        #                                            creationflags=subprocess.CREATE_NO_WINDOW).communicate()
+        # process_memory_info, _ = subprocess.Popen(process_memory_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        #                                               creationflags=subprocess.CREATE_NO_WINDOW).communicate()
+        #
+
+        memory_info = psutil.virtual_memory()
+        total_memory = memory_info.total / (1024 ** 2)  # 系统总内存
+        free_memory = memory_info.available / (1024 ** 2)  # 系统可用内存
+
+        current_process = psutil.Process()  # 获取当前的进程名称
+        process_memory = current_process.memory_info().private / (1024 ** 2)  # 获取当前进程使用的内存
+
+        if process_memory > 500.0:
+            self.memory_usage.emit("Red", f"{process_memory:.2f}", f"{free_memory:.2f}", f"{total_memory:.2f}")
+            self.warning_signal.emit("Red", '本程序的内存使用超过500MB，可能存在内存泄露，请注意！')
+            return
+
+        if free_memory / total_memory < 0.25:
+            self.memory_usage.emit("Red", f"{process_memory:.2f}", f"{free_memory:.2f}", f"{total_memory:.2f}")
+            self.warning_signal.emit("Red", '系统内存使用率超过75%，请注意！')
+            return
+
+        self.memory_usage.emit("Black", f"{process_memory:.2f}", f"{free_memory:.2f}", f"{total_memory:.2f}")
+
+    def get_memory_info_linux(self):
+        """获取软件的内存使用情况和整个系统的内存使用情况，适用于Linux系统"""
+        pass
+
+
+class SubCANWorker(QObject):
+    """订阅CAN类型的ZMQ消息"""
+    can_message = pyqtSignal(list)  # 定义信号，用来抛出订阅到的CAN数据
+    stop_sub_message = pyqtSignal()  # 定义停止订阅信息的信号
+    stop_get_message = pyqtSignal()  # 定义停止获取信息的信号
+    sub_state_good = pyqtSignal(str)  # 更新提示信息的信号
+    sub_state_bad = pyqtSignal(str)  # 更新提示信息的信号
+    sub_warning = pyqtSignal(str, str)  # 更新提示信息的信号
+
+    def __init__(self, sub_points, can_zmq_theme=None):
+        super().__init__()
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        if can_zmq_theme is None:
+            self.can_zmq_theme = b'CanServerData'
+        self.zmq_suber = ZMQSuber(sub_points, zmq_sub_theme=self.can_zmq_theme)
+
+
+    def _check_states(self):
+        """抛出各个ZMQ节点的数据订阅状态，能收到数据表示节点状态正常，收不到数据表示节点状态异常"""
+        while ZMQSubFlag.sub_flag:
+            for bad_point in SubPointStates.bad_points.copy():
+                self.sub_state_bad.emit(bad_point)
+
+            for good_point in SubPointStates.good_points.copy():
+                self.sub_state_good.emit(good_point)
+            # 当停止事件触发时，立刻退出循环
+            # NOTE：此处不要使用 time.sleep(2)
+            #  time.sleep()是阻塞操作，代码执行到这里的时候，就会阻塞两秒执行。
+            #  当用户点击【重置订阅】按钮之后，标志位sub_flag被置为False，但是该while循环由于time.sleep()的阻塞操作，不会立即结束循环，而是继续等待
+            #  此时，子线程 SubCANThread 已经退出被删除，而 SubCANThread 内部的 check_states() 仍在运行中，就会导致子线程报错
+            #  而使用 threading.Event().wait(2), 则表示等待两秒 或者 Event() 事件被触发——也就是说当 Event() 事件被触发时，代码在此处就不会等待，该子线程会被立即唤醒，得以继续往后执行
+            self.stop_event.wait(2)
+
+    def _warning_state(self):
+        """抛出告警信息，提示某ZMQ节点没有订阅到数据"""
+        while ZMQSubFlag.sub_flag:
+            for bad_point in SubPointStates.bad_points.copy():
+                self.sub_warning.emit('Red', f'节点【{bad_point}】没有订阅到数据，可能是ZMQ接收超时，可尝试提高超时时间。如果还未收到数据，请检查是否有数据发送出来！')
+                self.stop_event.wait(2)
+
+            self.sub_warning.emit('transparent', '')
+            self.stop_event.wait(2)  # NOTE：用法同上面的 check_states() 函数
+
+    @staticmethod
+    def _bytes2can(bytes_message):
+        """
+        func: 将ZMQ总线数据转换为CAN格式的数据
+        :param bytes_message: ZMQ总线数据
+        :return: 元组，(通道ID，数据长度，源地址，目的地址，帧ID, CID，数据)，每个字段均为字符串
+        """
+        can_data = CANData()
+        frame_id, channel_id, data_len, data = can_data.get_can_data(bytes_message)
+        # data部分原来是一个列表，其中的元素为十进制整数
+        frame_id_bin = bin(frame_id)  # 首先计算帧ID的二进制形式
+        # 通过帧ID计算源地址、目的地址、CID
+        cid = hex(int(frame_id_bin[-5:-1], 2))[2:].upper().rjust(2, '0')
+        smac = hex(int(frame_id_bin[-13:-5], 2))[2:].upper().rjust(2, '0')
+        dmac = hex(int(frame_id_bin[-21:-13], 2))[2:].upper().rjust(2, '0')
+
+        # 计算帧ID的十六进制形式
+        frame_id = hex(frame_id)[2:].upper()
+
+        # 现在将每个元素转换为16进制，并用空格将所有元素组合成一整个字符串，方便后续写入和用户查看
+        # 转成16进制时，右对齐，不足两位的高位填充 0；且16进制前面不带 0x,，字母大写，不包括CID
+        data = ' '.join([hex(item)[2:].upper().rjust(2, '0') for item in list(data)[1:data_len]])
+        data_len = data_len - 1  # 只包含CAN数据的长度，不包含CID
+
+        return [str(channel_id), str(data_len), smac, dmac, frame_id, cid, data]
+
+    def _get_zmq_can(self):
+        """从队列中获取订阅到的数据，并通过信号的形式抛出"""
+        while ZMQSubFlag.get_flag:
+            try:
+                with self.lock:
+                    message = ZMQSub.data_deque.popleft()
+                    self.can_message.emit(
+                        [message['time'], message['sub_addr'], message['theme'].decode('utf-8'), *(self._bytes2can(message['message']))])  # 将数据以信号的方式抛出
+            except IndexError:
+                # print("缓存中没有数据，跳过！")
+                # 增加时间间隙，让系统切换到其他线程，否则会导致GUI界面卡顿
+                time.sleep(0.001)
+                continue
+
+        self.stop_get_message.emit()
+
+    def sub_can_data(self):
+        """启动保存CAN数据和消费CAN数据的子线程"""
+        # daemon=True，当主线程退出时，子线程立即退出
+        get_can_thread = threading.Thread(target=self._get_zmq_can, daemon=True)
+        check_sub_thread = threading.Thread(target=self._check_states, daemon=True)
+        warning_sub_thread = threading.Thread(target=self._warning_state, daemon=True)
+
+        get_can_thread.start()
+        check_sub_thread.start()
+        warning_sub_thread.start()
+
+        # 不再额外创建 sub_can_thread 线程，
+        # 当前sub_can_data()本身已经运行在QThread线程中，因此直接在这里执行ZMQ订阅函数即可
+        self.zmq_suber.start_sub()
+
+        # start_sub()函数执行完毕，说明ZMQ订阅线程已经结束，接下来需要等待消费数据的线程也结束
+        get_can_thread.join()
+
+class CANTableModel(QAbstractTableModel):
+    def __init__(self, headers, max_size=10000):
+        super().__init__()
+        self._messages = deque()  # 使用 deque() 而不是 list，提高在序列开头插入数据的效率，降低时间复杂度
+        self._headers = headers  # 列表
+        self.max_size = max_size  # 设置最大数据量
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return len(self._messages)
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return 10  # 表格有10列
+
+    def headerData(self, section: int, orientation, role=Qt.DisplayRole):
+        """对QTableView的垂直和水平方向表头进行设置"""
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Horizontal:
+                return self._headers[section]  # 设置表头行的内容
+            elif orientation == Qt.Vertical:
+                return str(self.rowCount() - section)  # 垂直方向的表头：反向计算行号，最新的行号位于顶部
+        elif role == Qt.FontRole:
+            font = QFont("微软雅黑")
+            font.setBold(True)  # 标题字体加粗
+            font.setPointSize(10)  # 字号10
+            return font
+        return None
+
+    def data(self, index, role=Qt.DisplayRole):
+        # 根据在QTableView中选中的单元格索引，来对不同的单元格进行不同的设置
+        if not index.isValid():
+            return None  # 如果选中的不是单元格，直接返回
+        if role == Qt.DisplayRole:
+            return self._messages[index.row()][index.column()]  # 如果选中的是正常显示内容的单元格，则返回选中单元格的内容
+
+        # 设置表格中每一列的数据对齐方式
+        if role == Qt.TextAlignmentRole:
+            if index.column() == (self.columnCount() - 1) or index.column() == 1:
+                return Qt.AlignLeft | Qt.AlignVCenter  # 第二列和最后一列水平左对齐、垂直居中显示
+            else:
+                return Qt.AlignCenter  # 其余几列居中显示
+        return None
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+        # 返回QTableView中的单元格的状态——可选、使能
+        return Qt.ItemIsSelectable | Qt.ItemIsEnabled
+
+    def add_message(self, message):
+        """在QTableView中插入新的订阅到的数据"""
+        # 当数据量超过最大行数时，删除旧数据
+        if len(self._messages) >= self.max_size:
+            self.beginRemoveRows(QModelIndex(), self.max_size - 1, self.max_size - 1)
+            self._messages.pop()  # 删除最旧的数据（从队列尾部删除）
+            self.endRemoveRows()
+
+        # 插入新数据到最开始的位置
+        self.beginInsertRows(QModelIndex(), 0, 0)
+        self._messages.appendleft(message)  # 在队列 deque() 的左侧插入新数据，时间复杂度为 O(1)
+        self.endInsertRows()
+
+    def clear_data(self):
+        """清空QTableView中的所有数据"""
+        self.beginResetModel()
+        self._messages.clear()  # 清空存储数据的队列
+        self.endResetModel()
+
+
+class FrameIDDialog(QDialog):
+    def __init__(self, results):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        self.table = QTableWidget(len(results), 3)
+        # 不显示行号
+        self.table.verticalHeader().setVisible(False)
+        # 设置标题的值和样式
+        self.table.setHorizontalHeaderLabels(["字段", "值", "进制"])
+        self.table.setStyleSheet("""
+            QHeaderView::section {
+                    background-color: rgb(64, 179, 229);
+                    font: 9pt '微软雅黑';
+                }
+        """)
+
+        cell_font = QFont("微软雅黑", 9)
+        for row, (key, value, num_sys) in enumerate(results):
+            key_item = QTableWidgetItem(key)
+            key_item.setTextAlignment(Qt.AlignCenter)
+            key_item.setFont(cell_font)
+            self.table.setItem(row, 0, key_item)
+
+            value_item = QTableWidgetItem(value)
+            value_item.setTextAlignment(Qt.AlignCenter)
+            value_item.setFont(cell_font)
+            self.table.setItem(row, 1, value_item)
+
+            num_sys_item = QTableWidgetItem(num_sys)
+            num_sys_item.setTextAlignment(Qt.AlignCenter)
+            num_sys_item.setFont(cell_font)
+            self.table.setItem(row, 2, num_sys_item)
+
+        layout.addWidget(self.table)
+        self.setLayout(layout)
+        self.setFixedSize(324, 260)
+
+
+class MultiFrameDialog(QDialog):
+    def __init__(self, frame_id, data):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        self.data_table = QTableWidget(len(data), 3)
+        # 不显示行号
+        self.data_table.verticalHeader().setVisible(False)
+
+        self.data_table.setHorizontalHeaderLabels(["序号", "帧ID", "数据"])
+        self.data_table.setStyleSheet("""
+            QHeaderView::section {
+                    background-color: rgb(64, 179, 229);
+                    font: 10pt '微软雅黑';
+                }
+        """)
+        self.data_table.horizontalHeader().setFixedHeight(30)
+
+        self.data_table.setColumnWidth(0, 60)
+        self.data_table.setColumnWidth(1, 90)
+        self.data_table.setColumnWidth(2, 175)
+
+        # 单元格字体
+        cell_font = QFont("微软雅黑", 10)
+        # 添加数据
+        for row, item in enumerate(data):
+            num_item = QTableWidgetItem(f'第{row + 1}帧')
+            frame_id_item = QTableWidgetItem(frame_id)
+            data_item = QTableWidgetItem(' '.join(item))
+
+            num_item.setFont(cell_font)
+            frame_id_item.setFont(cell_font)
+            data_item.setFont(cell_font)
+
+            num_item.setTextAlignment(Qt.AlignCenter)
+            frame_id_item.setTextAlignment(Qt.AlignCenter)
+
+            self.data_table.setItem(row, 0, num_item)
+            self.data_table.setItem(row, 1, frame_id_item)
+            self.data_table.setItem(row, 2, data_item)
+
+            self.data_table.setRowHeight(row, 30)
+
+        self.copy_button = QPushButton("全部复制")
+        self.copy_button.setFont(QFont("微软雅黑", 10))
+        self.copy_button.setFixedHeight(40)
+
+        self.copy_button.clicked.connect(self._copy_all_action)
+
+        layout.addWidget(self.data_table)
+        layout.addWidget(self.copy_button)
+        self.setLayout(layout)
+
+        self.setFixedWidth(349)
+        self.setFixedHeight(30 * (len(data) + 1) + 70)  # 根据数据帧数，计算窗口的高度
+
+    def _copy_all_action(self):
+        """点击【全部复制】按钮，将显示多帧数据窗口中的所有内容全部复制到剪切板上"""
+        row_count = self.data_table.rowCount()
+        column_count = self.data_table.rowCount()
+        table_data = ""
+        for row in range(row_count):
+            row_data = list()
+            for column in range(column_count):
+                item = self.data_table.item(row, column)
+                if item is not None:
+                    row_data.append(item.text())
+                # else:
+                #     row_data.append("")
+            table_data += "\t".join(row_data) + "\n"
+
+        # 将文本复制到剪贴板
+        clipboard = QApplication.clipboard()
+        clipboard.setText(table_data)
+
+
+class MainWindow(QMainWindow, Ui_MainWindow):
+    update_tip = pyqtSignal(str, str)  # 更新提示信息的信号
+    update_warning = pyqtSignal(str, str)  # 更新告警信息的信号
+
+    def __init__(self, parent=None):
+        super(MainWindow, self).__init__(parent)
+        self.setupUi(self)
+        self.setWindowTitle("CAN-ZMQ-Monitor (V1.1 2024/09/14)")
+        self.setFixedSize(1740, 970)
+        self.center_window()
+
+        # 设置界面上三个主要窗口的内容
+        self.set_table_view()
+        self.set_zmq_point_window()
+        self.set_filter_condition_window()
+
+        # 创建两个列表，分别保存解算帧ID的对话框和显示多帧数据的对话框
+        self.reverse_frame_id_dialogs = list()
+        self.multi_frame_data_dialogs = list()
+
+        # 初始化时 【重置订阅】、【暂停订阅】按钮不能点击
+        self.pushButton_3.setDisabled(True)
+        self.pushButton_4.setDisabled(True)
+
+        # 设置 显示最大行数的输入范围
+        max_line_validator = QIntValidator(self)
+        max_line_validator.setRange(10, 100000)
+        self.lineEdit.setValidator(max_line_validator)
+        self.lineEdit.textChanged.connect(self.check_max_line_number_input)
+
+        # 给【清空数据】按钮绑定槽函数
+        self.pushButton.clicked.connect(self.empty_table_view)
+        # 给【开始订阅】按钮绑定槽函数
+        self.pushButton_2.clicked.connect(self.sub_data_start)
+        # 给【重置订阅】按钮绑定槽函数
+        self.pushButton_3.clicked.connect(self.reset_sub_data)
+        # 给【暂停订阅】按钮绑定槽函数
+        self.pushButton_4.clicked.connect(self.suspend_sub_data)
+        # 给【新增节点】按钮绑定槽函数
+        self.pushButton_5.clicked.connect(lambda: self.add_zmq_point(checked=True, addr="tcp://127.0.0.1:8082"))
+        # 给【删除节点】按钮绑定槽函数
+        self.pushButton_6.clicked.connect(self.delete_zmq_point)
+        # 给【清除】按钮绑定槽函数
+        self.pushButton_7.clicked.connect(self.clear_filter_condition)
+        # 给【应用】按钮绑定槽函数
+        self.pushButton_8.clicked.connect(self.apply_filter)
+
+        # 将下拉框中初始设置的缓存大小和超时时间传递给对应的参数
+        self.set_cache_length(self.comboBox.currentText())
+        self.set_receive_timeout(self.comboBox_2.currentText())
+
+        # 当用户选择不同的缓存长度时，设置缓存数据的队列长度
+        self.comboBox.currentIndexChanged[str].connect(self.set_cache_length)
+        # 当用户选择不同的超时时间时，设置ZMQ接收数据的超时时间
+        self.comboBox_2.currentIndexChanged[str].connect(self.set_receive_timeout)
+
+        # 是否过滤数据的标志位，默认不过滤
+        self.filter_data = False
+
+        # 将更新提示信息的信号绑定到用来在界面显示的函数
+        self.update_tip.connect(self.tips_update)
+        self.update_warning.connect(self.warnings_update)
+
+        self.display_system_info()
+
+    def closeEvent(self, event):
+        """
+        func: 主窗口关闭时，关闭所有窗口
+        :param event: 关闭事件
+        """
+        event.accept()
+
+        try:
+            for dialog in self.reverse_frame_id_dialogs:
+                dialog.close()
+            super().closeEvent(event)
+
+            for dialog in self.multi_frame_data_dialogs:
+                dialog.close()
+            super().closeEvent(event)
+        except RuntimeError as e:
+            zmq_monitor_logger.error(f"窗口关闭异常！")
+            zmq_monitor_logger.error(e)
+
+    def set_cache_length(self, length):
+        """
+        func: 设置保存数据的队列长度的变量
+        :param length: 需要设置的长度值
+        """
+        ZMQSub.MAX_QUEUE_SIZE = int(length)
+        if hasattr(self, 'system_info'):
+            self.system_info.get_cache_percent()
+        zmq_monitor_logger.info(f"设置ZMQ订阅缓冲区的长度为 {length}。")
+
+    @staticmethod
+    def set_receive_timeout(timeout):
+        """
+        func: 设置表示ZMQ订阅数据超时时间的变量
+        :param timeout: 超时时间，单位 秒
+        """
+        ZMQSub.ZMQ_RCV_TIMEOUT = int(float(timeout) * 1000)
+        zmq_monitor_logger.info(f"设置ZMQ接收数据的超时时间为 {timeout}秒。")
+
+    def center_window(self):
+        """设置主窗口为于屏幕的正中央"""
+        # 获取当前屏幕的矩形几何尺寸
+        screen = QApplication.primaryScreen().availableGeometry()
+        # 获取窗口的矩形几何尺寸
+        window_rect = self.frameGeometry()
+        # 计算屏幕中心点
+        screen_center = screen.center()
+        # 将窗口的中心点移动到屏幕中心点
+        window_rect.moveCenter(screen_center)
+        # 移动窗口到新的位置
+        self.move(window_rect.topLeft())
+
+    def check_max_line_number_input(self):
+        """检查用户在 最大显示行数的输入框 中的输入合法性，并限制非法输入"""
+        text = self.lineEdit.text()
+        if text == '':
+            pass
+        elif len(text) > 6 or int(text) > 100000:
+            self.lineEdit.setText(text[:-1])
+        elif text.startswith('0'):
+            self.lineEdit.setText('')
+
+    def set_table_view(self, max_size=10000):
+        """给 显示CAN数据的TableView 设置数据模型"""
+        headers = ["时间", "ZMQ地址", "主题", "通道ID", "数据长度", "源地址", "目的地址", "帧ID", "CID", "CAN数据"]  # 表格标题
+        self.model = CANTableModel(headers, max_size)  # 实例化数据模型
+        self.tableView.setModel(self.model)  # 将数据模型应用到 table view
+
+        # 获取表头
+        header = self.tableView.horizontalHeader()
+
+        # header.setSectionResizeMode(QHeaderView.ResizeToContents)  # 表格中的每一列的宽度自适应调整
+        # header.setDefaultSectionSize(80)  # 默认宽度 80像素
+        # header.setMinimumSectionSize(80)  # 最小宽度
+        # 设置每一列的宽度
+        self.tableView.setColumnWidth(0, 195)
+        self.tableView.setColumnWidth(1, 195)
+        self.tableView.setColumnWidth(2, 145)
+        for index in range(3, 9):
+            self.tableView.setColumnWidth(index, 80)
+
+        # 使最后一列拉伸以填充视图
+        header.setStretchLastSection(True)
+
+        # 设置右键菜单，捕捉右键点击事件
+        self.tableView.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tableView.customContextMenuRequested.connect(self._open_menu)
+
+        # 设置复制 QTableView 单元格内容的快捷键
+        copy_shortcut = QShortcut(QKeySequence("Ctrl+C"), self.tableView)
+        copy_shortcut.activated.connect(self._copy_selection)
+
+        # 设置 QTableView中的字体
+        self.tableView.setStyleSheet("""
+                            QTableView { font-family: '微软雅黑'; font-size: 10pt; }
+                            QHeaderView::section { background-color: rgb(64, 179, 229);  /* 设置背景颜色为 rgb(64, 179, 229) */
+                                    font-family: '微软雅黑'; font-size: 10pt; }
+                        """)
+
+        zmq_monitor_logger.info("数据显示窗口设置完成。")
+
+    def set_zmq_point_window(self):
+        """设置ZMQ订阅节点窗口的样式"""
+        # 设置表头的背景颜色
+        self.tableWidget.setStyleSheet("""
+            QTableWidget {
+                                        font-family: '微软雅黑';
+                                        font-size: 10pt;
+            }
+            QHeaderView::section { 
+                                        background-color: rgb(64, 179, 229); 
+            }"""
+                                       )
+        # 设置表头最后一列可以填充剩余空间
+        self.tableWidget.horizontalHeader().setStretchLastSection(True)
+        # 设置列宽
+        self.tableWidget.setColumnWidth(0, 70)
+        self.tableWidget.setColumnWidth(1, 70)
+        # 禁止调整行高和列宽
+        self.tableWidget.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        # 禁止拖动行
+        self.tableWidget.verticalHeader().setSectionsMovable(False)
+        # 设置行高
+        self.tableWidget.verticalHeader().setDefaultSectionSize(20)
+
+        # 读取配置文件，使用其中的数据初始化窗口
+        processor = ConfigProcess()
+        init_zmp_points = processor.get_zmq_point().get("SUB", [])
+        for point in init_zmp_points:
+            self.init_zmq_point(checked=point['sub'], addr=point['addr'])
+
+        self.tableWidget.itemChanged.connect(self.modify_config_file)
+
+        zmq_monitor_logger.info("ZMQ节点窗口设置完成。")
+
+    def set_filter_condition_window(self):
+        """设置过滤ZMQ数据的窗口的样式"""
+        # 设置表头的背景颜色
+        self.tableWidget_2.setStyleSheet("""
+                    QTableWidget {
+                                                font-family: '微软雅黑';
+                                                font-size: 10pt;
+                    }
+                    QHeaderView::section { 
+                                                background-color: rgb(64, 179, 229); 
+                    }"""
+                                         )
+        # 设置表头最后一列可以填充剩余空间
+        # self.tableWidget_2.horizontalHeader().setStretchLastSection(True)
+        # 设置列宽
+        self.tableWidget_2.setColumnWidth(0, 200)
+        self.tableWidget_2.setColumnWidth(1, 96)
+        # 禁止调整行高和列宽
+        self.tableWidget_2.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.tableWidget_2.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        # 禁止拖动行
+        self.tableWidget_2.verticalHeader().setSectionsMovable(False)
+        # 设置行高
+        self.tableWidget_2.verticalHeader().setDefaultSectionSize(20)
+
+        #  # 给【过滤关系】列添加选择控件
+        row_position = self.tableWidget_2.rowCount()
+        for row in range(row_position):
+            and_radio = QRadioButton()
+            and_radio.setText("AND")
+            and_radio.setFont(QFont("微软雅黑", 8))
+            or_radio = QRadioButton()
+            or_radio.setText("OR")
+            or_radio.setFont(QFont("微软雅黑", 8))
+
+            # 默认选中 AND
+            and_radio.setChecked(True)
+
+            # 添加到【过滤关系】这一列中
+            radio_widget = QWidget()
+            radio_layout = QHBoxLayout()
+            radio_layout.addWidget(and_radio)
+            radio_layout.addWidget(or_radio)
+            radio_layout.setAlignment(Qt.AlignCenter)
+            radio_layout.setContentsMargins(3, 0, 0, 0)
+            radio_widget.setLayout(radio_layout)
+            self.tableWidget_2.setCellWidget(row, 1, radio_widget)
+
+        zmq_monitor_logger.info("数据过滤窗口设置完成。")
+
+    def init_zmq_point(self, checked, addr):
+        """
+        func: 初始化一个ZMQ消息订阅节点
+        :param checked: Boolean，表示该节点前面的复选框是否被选中，选中表示订阅该节点的数据，否则不订阅
+        :param addr: string, 表示该ZMQ节点的地址，eg: "tcp://10.100.25.67:8082"
+        """
+        row_position = self.tableWidget.rowCount()
+        self.tableWidget.insertRow(row_position)
+
+        # 设置是否订阅
+        checkbox = QCheckBox()
+        checkbox.setChecked(checked)
+        checkbox_widget = QWidget()
+        checkbox_layout = QHBoxLayout()
+        checkbox_layout.addWidget(checkbox)
+        checkbox_layout.setAlignment(Qt.AlignCenter)
+        checkbox_layout.setContentsMargins(0, 0, 0, 0)
+        checkbox_widget.setLayout(checkbox_layout)
+        self.tableWidget.setCellWidget(row_position, 0, checkbox_widget)
+
+        # 设置label 用来表示数据订阅的状态
+        label = QLabel()
+        label.setStyleSheet("background-color: green;")
+        label.setFixedSize(40, 15)
+        label_widget = QWidget()
+        label_layout = QHBoxLayout()
+        label_layout.addWidget(label)
+        label_layout.setAlignment(Qt.AlignCenter)
+        label_layout.setContentsMargins(0, 0, 0, 0)
+        label_widget.setLayout(label_layout)
+        self.tableWidget.setCellWidget(row_position, 1, label_widget)
+
+        # 设置订阅地址
+        zmq_point = addr
+        item = QTableWidgetItem(zmq_point)
+        item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.tableWidget.setItem(row_position, 2, item)
+
+        # 当复选框状态发生变化时，同步状态到ZMQ配置文件
+        checkbox.stateChanged.connect(self.modify_config_file)
+        # 当复选框状态发生变化时，抛出对应的复选框状态和与之关联的ZMQ订阅地址
+        checkbox.stateChanged.connect(lambda state, address_item=item: self.update_sub_info(address_item.text(), state))
+
+    def add_zmq_point(self, checked, addr):
+        """
+        func: 点击【新增节点】按钮，在ZMQ订阅节点的窗口中新增一行ZMQ节点的信息。同时将地址单元格 设置为正在被编辑的状态
+        :param checked: Boolean，表示该节点前面的复选框是否被选中，选中表示订阅该节点的数据，否则不订阅
+        :param addr: string, 表示该ZMQ节点的地址，eg: "tcp://10.100.25.67:8082"
+        """
+        self.init_zmq_point(checked, addr)
+        row_position = self.tableWidget.rowCount()
+        zmq_addr_item = self.tableWidget.item(row_position - 1, 2)
+        zmq_addr_item.setFlags(zmq_addr_item.flags() | Qt.ItemIsEditable)  # 设置单元格可以被编辑
+        self.tableWidget.editItem(zmq_addr_item)  # 设置单元格处于正在被编辑的状体
+        zmq_monitor_logger.info(f"ZMQ节点【{addr}】添加完成。")
+
+    def delete_zmq_point(self):
+        """点击【删除节点】按钮，将删除选中的ZMQ消息订阅节点，然后将最新的节点订阅情况同步到配置文件中"""
+        selected_cell_index = self.tableWidget.selectedIndexes()  # 获取选中行索引，是一个列表
+
+        if selected_cell_index:
+            selected_row_number = selected_cell_index[0].row()  # 行号
+            self.tableWidget.removeRow(selected_row_number)  # 删除选中的行
+            self.modify_config_file()  # 同步更新配置文件
+            zmq_monitor_logger.info(f"原来第{selected_row_number}行的ZMQ节点删除完成。")
+        else:
+            self.update_tip.emit('OrangeRed', '请先选中一个想要删除的ZMQ节点！')
+
+    def clear_filter_condition(self):
+        """点击【清除】按钮，清除所有过滤条件，恢复所有过滤关系为AND"""
+        self.filter_data = False  # 恢复标志位
+        row_position = self.tableWidget_2.rowCount()
+        # 将【目标值】的内容清空
+        for row in range(row_position):
+            item = self.tableWidget_2.item(row, 0)
+            if item:
+                item.setText('')
+            else:
+                self.tableWidget_2.setItem(row, 0, QTableWidgetItem(''))
+
+        # 将【过滤关系】全部恢复成默认的AND
+        for row in range(row_position):
+            item = self.tableWidget_2.cellWidget(row, 1)
+            item.findChild(QRadioButton).setChecked(True)
+
+        self.update_tip.emit('LightSeaGreen', '清除过滤条件，数据未被过滤！')
+        zmq_monitor_logger.info("清除全部数据过滤条件！")
+
+    def apply_filter(self):
+        """点击【应用】按钮，将用设置的过滤条件过滤显示的数据"""
+        self.filter_data = True  # 设置过滤标志位
+
+        # 获取表格中设置的各个过滤条件
+        whole_filter_condition = dict()
+
+        row_position = self.tableWidget_2.rowCount()
+        for row in range(row_position):
+            filter_item = self.tableWidget_2.item(row, 0)
+            filter_relationship = self.tableWidget_2.cellWidget(row, 1).findChild(QRadioButton).isChecked()
+            if filter_item:
+                whole_filter_condition[self.tableWidget_2.verticalHeaderItem(row).text()] = [filter_item.text(), filter_relationship]
+
+        # 整理过滤条件
+        self.and_filter_condition = dict()
+        self.or_filter_condition = dict()
+        for name, value in whole_filter_condition.items():
+            # NOTE: 当 QTableWidget 中的单元格被双击过之后，即使用户没有输入任何内容，那么从该单元格中获得的内容将是 空字符串 ‘’；
+            # NOTE: 与之相对的，如果初始化一个 QTableWidget 之后，如果没有对其中的单元格做过任何操作，那么该单元格获取的内容为 None；
+            # NOTE: 两种情况是不一样的，需要单独处理 第一种情况
+            if value[0].strip() != '':
+                # 对过滤条件进行处理：获取单元格中用户输入的内容之后，去除两侧的空白字符，替换全角分号为半角分号，小写，替换帧ID中的0x，以半角分号分割字符串为列表
+                filters = [item.strip() for item in value[0].strip().replace('；', ';').lower().replace('0x', '').split(';')]
+                # 分别保存 AND 和 OR 的过滤条件
+                if value[1]:
+                    self.and_filter_condition[name] = filters
+                else:
+                    self.or_filter_condition[name] = filters
+        # 更新提示信息
+        if self.and_filter_condition or self.or_filter_condition:
+            self.update_tip.emit('LightSeaGreen', '数据正在被过滤 ...')
+            zmq_monitor_logger.info(f"数据正在被过滤，过滤条件为【AND：{self.and_filter_condition} / OR {self.or_filter_condition}】")
+        else:
+            self.update_tip.emit('', '')
+            zmq_monitor_logger.warning("用户点击了【开始过滤】按钮，但是没有设置过滤条件，所以数据未被过滤！")
+
+    def get_zmq_point_paras(self):
+        """
+        func: 获取zmq节点窗口中的相关参数
+        :return: 保存了各个zmq节点信息的列表
+        """
+        zmq_datas = list()  # 用来保存 table widget 中的所有值
+
+        row_count = self.tableWidget.rowCount()
+        column_count = self.tableWidget.columnCount()
+        try:
+            # 遍历 table widget, 获取表格中所有单元格的值
+            for row in range(row_count):
+                item_data = list()  # 每一行的单元格的值 【是否订阅】和【订阅地址】保存到列表中
+                for column in range(column_count):
+                    if column == 1:
+                        continue  # 不需要处理【数据状态】列
+                    # 获取每个单元格对象
+                    cell_widget = self.tableWidget.cellWidget(row, column)
+
+                    # 处理 table widget 中的 QCheckBox
+                    if cell_widget is not None:
+                        if isinstance(cell_widget, QWidget):
+                            # 参见函数add_zmq_point(), 第一列中的复选框是先放在一个 QWidget中，再放入TableWidget的第一列的单元格里面
+                            checkbox = cell_widget.findChild(QCheckBox)
+                            if checkbox is not None:  # 如果在单元格中查到了 复选框这个控件，就保存该控件的勾选状态
+                                item_data.append(checkbox.isChecked())
+                            else:
+                                # Note: 当双击table widget的第三列（保存zmq地址）时，第三列的单元格控件就变成了 QLineEdit
+                                # Note: 而 QLineEdit 也是 QWidget的实例，也会进入到这个分支，但是肯定在该单元格不可能找到 QCheckBox这个控件
+                                # Note: 所以此时就直接调用 .text() 方法获取该控件的文本内容，插入到列表的最开始（后续写入配置文件时先写入zmq的地址）
+                                item_data.insert(0, cell_widget.text())
+                    # 处理 table widget 中的 普通单元格（保存ZMQ节点地址的单元格）
+                    # Note: 当QTableWidget中的普通单元格没有经过双击 进行编辑时，该普通单元格不是一个QWidget，而是 一个QTableWidgetItem
+                    else:
+                        item = self.tableWidget.item(row, column)
+                        if item is not None:
+                            item_data.insert(0, item.text())
+
+                # 将每行的值 也保存到一个列表中
+                zmq_datas.append(item_data)
+
+            if zmq_datas:
+                zmq_monitor_logger.info(f"获取到了各个ZMQ节点的订阅信息【{zmq_datas}】")
+            else:
+                zmq_monitor_logger.warning("没有ZMQ订阅节点！")
+
+            return zmq_datas
+
+        except Exception as e:
+            zmq_monitor_logger.error("遍历ZMQ订阅节点窗口异常，请检查！")
+            zmq_monitor_logger.error(e)
+
+    def modify_config_file(self):
+        """当用户修改ZMQ订阅节点窗口时，将修改结果同步到配置文件中，相当于保存了用户上一次使用时的配置"""
+        zmq_datas = self.get_zmq_point_paras()  # 获取ZMQ节点窗口中当前的节点信息
+        try:
+            # 修改配置文件
+            processor = ConfigProcess()
+            processor.write_zmq_sub_point(zmq_datas)
+        except Exception as e:
+            zmq_monitor_logger.error("将最新ZMQ订阅参数同步到配置文件异常，请检查！")
+            zmq_monitor_logger.error(e)
+
+    def update_sub_info(self, zmq_point, is_sub):
+        """当各个ZMQ订阅节点前面的复选框勾选状态发生变化时，抛出当前复选框的勾选状态和对应的节点地址"""
+        if hasattr(self, "my_sub_data_thread"):
+            # 当主程序初始化了订阅数据的子线程之后，将各个ZMQ订阅节点的订阅状态传递给子线程
+            self.sub_can_worker.zmq_suber.get_update_sub_info(zmq_point, is_sub)
+
+    def _open_menu(self, position):
+        """
+        func: 设置右键菜单
+        :param position: 表示单元格的位置
+        """
+        menu = QMenu(self)
+        copy_action = QAction("复制内容", self)
+        # 设置字体和大小
+        copy_action.setFont(QFont("微软雅黑", 10))
+        # 绑定 action 和 对应的复制函数
+        copy_action.triggered.connect(self._copy_selection)
+
+        # reverse_frame_id_action
+        reverse_frame_id_action = QAction("解算帧ID", self)
+        # 设置字体和大小
+        reverse_frame_id_action.setFont(QFont("微软雅黑", 10))
+        # 显示多帧数据，并补充每一帧的第一个字节，恢复成原始CAN数据的长度
+        reverse_multi_frame_data_action = QAction("显示多帧", self)
+        reverse_multi_frame_data_action.setFont(QFont("微软雅黑", 10))
+
+        # 计算右键选中的单元格的索引值
+        index = self.tableView.indexAt(position)
+        if not index.isValid():
+            return
+        # 当选中的单元格是【帧ID】这一列时，【解算帧ID】的菜单才能够被点击
+        reverse_frame_id_action.setEnabled(True) if index.column() == 7 else reverse_frame_id_action.setDisabled(True)
+        # 绑定 action 和 对应的复制函数
+        reverse_frame_id_action.triggered.connect(lambda: self._reverse_frame_id(index))
+
+        # 当选中的单元格是【CAN数据】这一列时，【显示多帧】的菜单才能够被点击
+        reverse_multi_frame_data_action.setEnabled(True) if index.column() == 9 else reverse_multi_frame_data_action.setDisabled(True)
+        reverse_multi_frame_data_action.triggered.connect(lambda: self._reverse_multi_frame_data(index))
+
+        # 添加到右键菜单
+        menu.addAction(copy_action)
+        # 添加一个分隔符
+        menu.addSeparator()
+        menu.addAction(reverse_frame_id_action)
+        menu.addSeparator()
+        menu.addAction(reverse_multi_frame_data_action)
+
+        # 设置右键菜单的样式
+        menu.setStyleSheet("""
+                QMenu {
+                    background-color: #ffffff;
+                    border: 1px solid #dcdcdc;
+                }
+                QMenu::item {
+                    background-color: transparent;
+                    padding: 4px 6px; /* 调整菜单页的内边距 */
+                   }
+                QMenu::item::selected {
+                    background-color: #e3e3e3; /* 菜单选中时的背景色 */
+                }
+        """)
+        # 显示菜单
+        menu.exec_(self.tableView.viewport().mapToGlobal(position))
+
+    def _copy_selection(self):
+        """复制选中单元格的内容"""
+        selected_indexes = self.tableView.selectionModel().selectedIndexes()
+        if not selected_indexes:
+            return
+        # 收集选中单元格的数据
+        selected_text = ""
+        rows = sorted(set(index.row() for index in selected_indexes))
+        for row in rows:
+            row_data = []
+            for index in sorted(index for index in selected_indexes if index.row() == row):
+                row_data.append(str(index.data()))
+            selected_text += "\t".join(row_data) + "\n"
+
+        # 将文本复制到剪贴板
+        clipboard = QApplication.clipboard()
+        clipboard.setText(selected_text.strip())
+
+    def _reverse_frame_id(self, index):
+        """
+        func: 对单元格中的帧ID 进行解算，并将解算结果传给用来显示用来显示的对话框
+        :param index: table view 中单元格的索引值
+        """
+        # 获取选中的单元格中的内容
+        frame_id = self.model.data(index, Qt.DisplayRole)
+        zmq_monitor_logger.info(f'开始反解算帧ID【{frame_id}】...')
+
+        # 首先计算帧ID的二进制形式（先将16进制的字符串转换为10进制整数，再转换为二进制字符串）
+        frame_id_bin = bin(int(frame_id, 16))[2:]
+
+        # 解算帧ID，计算 PRI，SegFlag, GroupID, 源地址、目的地址、CID, ACK
+        pri = frame_id_bin[:3]
+        seg_flag = frame_id_bin[3:4]
+        group_id = frame_id_bin[4:8]
+        dmac = hex(int(frame_id_bin[-21:-13], 2))[2:].upper().rjust(2, '0')
+        smac = hex(int(frame_id_bin[-13:-5], 2))[2:].upper().rjust(2, '0')
+        cid = hex(int(frame_id_bin[-5:-1], 2))[2:].upper().rjust(2, '0')
+        ack = frame_id_bin[-1]
+
+        frame_id_results = [('PRI', pri, 'BIN'), ('Seg_Flag', seg_flag, 'BIN'), ('GroupID', group_id, 'BIN'), ('DMAC', dmac, 'HEX'), ('SMAC', smac, 'HEX'),
+                            ('CID', cid, 'BIN'), ('ACK', ack, 'BIN')]
+
+        # 弹出对话框显示帧ID的解算结果
+        self._show_frame_id_reversed(frame_id, frame_id_results)
+
+    def _show_frame_id_reversed(self, frame_id, frame_id_reversed):
+        """
+        func: 调用创建弹窗的类 FrameIDDialog 来生成对应的弹窗，显示帧ID的解算结果
+        :param frame_id: 帧ID，str
+        :param frame_id_reversed: 帧ID的解算结果， list
+        """
+        # 当打开的帧ID解算结果窗口大于5个时，关闭最开始打开的弹窗
+        if len(self.reverse_frame_id_dialogs) >= 5:
+            oldest_dialog = self.reverse_frame_id_dialogs.pop(0)
+            oldest_dialog.close()
+
+        # 创建对话框，用来显示帧ID的解算结果
+        self.frame_id_dialog = FrameIDDialog(frame_id_reversed)
+        self.frame_id_dialog.setWindowTitle(f"帧ID {frame_id} 反解算结果")
+        # 设置为非模态
+        self.frame_id_dialog.setWindowModality(Qt.NonModal)
+        # 关闭弹窗时自动删除其内存
+        self.frame_id_dialog.setAttribute(Qt.WA_DeleteOnClose)
+        # 保存对话框的引用，避免被垃圾回收
+        self.reverse_frame_id_dialogs.append(self.frame_id_dialog)
+
+        self.frame_id_dialog.show()
+        zmq_monitor_logger.info('显示帧ID反解算结果。')
+
+    def _reverse_multi_frame_data(self, index):
+        """
+        func: 计算多帧数据的完整结果
+        :param index: 多帧数据所在单元格的索引值
+        """
+        # 当打开的显示多帧数据的窗口大于5个时，关闭最开始打开的弹窗
+        if len(self.multi_frame_data_dialogs) >= 5:
+            oldest_dialog = self.multi_frame_data_dialogs.pop(0)
+            oldest_dialog.close()
+
+        # 获取选中的单元格中的内容
+        can_data = self.model.data(index, Qt.DisplayRole)
+        can_data_list = can_data.split(" ")
+
+        # 根据选中的数据获取到其对应的帧ID——使用 siblingAtColumn() 函数，表示和选中单元格位于同一行的列索引为7的单元格
+        frame_id = self.model.data(index.siblingAtColumn(7), Qt.DisplayRole)
+
+        # 判断是否为多帧数据
+        data_len = len(can_data_list)
+        if data_len <= 8:
+            return  # 单帧数据，不处理
+
+        zmq_monitor_logger.info(f'开始解算多帧数据【{can_data_list}】...')
+
+        # 拆分多帧数据
+        frame_number = data_len // 7
+        seperated_can_data = [can_data_list[num: num + 7] for num in range(frame_number)]
+
+        # 计算要补充的首字节的值
+        # 4帧： [40, 81, 82, C3]
+        # 8帧： [40, 81, 82, 83, 84, 85, 86, C7]
+        first_bytes = list()  # 保存完整的多帧数据
+        for i in range(frame_number):
+            if i == 0:
+                first_byte = f'4{hex(i)[2:]}'
+            elif i == frame_number - 1:
+                first_byte = f'C{hex(i)[2:].upper()}'
+            else:
+                first_byte = f'8{hex(i)[2:].upper()}'
+            first_bytes.append(first_byte)
+
+        # 补充每一帧的第一个字节
+        completed_can_data = [[first] + rest for first, rest in zip(first_bytes, seperated_can_data)]
+
+        self._show_multi_frame_data(frame_id, completed_can_data)
+
+    def _show_multi_frame_data(self, frame_id, data):
+        """
+        func: 单独打开一个弹窗，显示多帧数据的拆分结果
+        :param frame_id: 帧ID
+        :param data: 多帧数据
+        """
+        self.multi_frame_data_dialog = MultiFrameDialog(frame_id, data)
+        self.multi_frame_data_dialog.setWindowTitle(f"多帧CAN数据完整结果")
+        self.multi_frame_data_dialog.setWindowModality(Qt.NonModal)
+        self.multi_frame_data_dialog.setAttribute(Qt.WA_DeleteOnClose)
+
+        self.multi_frame_data_dialogs.append(self.multi_frame_data_dialog)
+        self.multi_frame_data_dialog.show()
+        zmq_monitor_logger.info(f'显示多帧数据【{data}】...')
+
+    def sub_data_start(self):
+        """开始订阅并显示CAN的ZMQ总线消息"""
+        # 获取最新ZMQ节点信息
+        zmq_points = self.get_zmq_point_paras()
+        if not zmq_points:
+            zmq_monitor_logger.warning(f"用户没有添加ZMQ订阅节点，请先添加节点再开始订阅！")
+            self.update_warning.emit('OrangeRed', '没有ZMQ订阅节点，请先添加节点再开始订阅！')
+            return
+
+        ZMQSubFlag.sub_flag = True  # 恢复写入ZMQ数据到队列中
+        ZMQSubFlag.get_flag = True  # 恢复从队列中获取ZMQ数据
+
+        self.empty_table_view()  # 清空表格中上次残留的数据
+        self.update_tip.emit('', '')  # 清空提示信息
+
+        # 获取显示的最大数据行数，并重新设置给显示数据的QTabelView
+        if self.lineEdit.text() == '':
+            max_line_numbers = 10000
+            self.lineEdit.setText('10000')
+            self.update_tip.emit('LightSeaGreen', '用户没有设置最大显示行数，默认显示10000行！')
+            zmq_monitor_logger.info('用户没有设置最大显示行数，默认显示10000行！')
+        else:
+            max_line_numbers = int(self.lineEdit.text())
+            if max_line_numbers < 10:
+                max_line_numbers = 10
+                self.lineEdit.setText('10')
+            elif max_line_numbers > 100000:
+                max_line_numbers = 100000
+                self.lineEdit.setText('100000')
+
+        # 给QTableView的数据模型设置最大显示行数
+        self.model.max_size = max_line_numbers
+        zmq_monitor_logger.info(f'设置最大显示行数为{max_line_numbers}。')
+
+        # 开始订阅之后，禁止再次点击【开始订阅】、【添加节点】、【删除节点】按钮，放开 【重置订阅】、【暂停订阅】按钮， 禁止选择【缓存大小】、【超时时间】
+        self.pushButton_2.setDisabled(True)
+        self.pushButton_5.setDisabled(True)
+        self.pushButton_6.setDisabled(True)
+        self.pushButton_3.setEnabled(True)
+        self.pushButton_4.setEnabled(True)
+        self.comboBox.setDisabled(True)
+        self.comboBox_2.setDisabled(True)
+        self.lineEdit.setDisabled(True)
+
+        # 创建订阅CAN数据的子线程
+        zmq_monitor_logger.info("订阅子线程开始创建 ...")
+        self.sub_data_thread = QThread()
+        self.sub_can_worker = SubCANWorker(zmq_points)
+        self.sub_can_worker.moveToThread(self.sub_data_thread)
+
+        # 订阅数据的子线程开始之后，调用获取数据的函数
+        self.sub_data_thread.started.connect(self.sub_can_worker.sub_can_data)
+
+        # 收到can_message信号之后，将数据插入到 TableView中
+        self.sub_can_worker.can_message.connect(self.add_new_data)
+
+        # 停止订阅后 删除相关线程
+        self.sub_can_worker.stop_get_message.connect(self.sub_data_thread.quit)
+        self.sub_can_worker.stop_get_message.connect(self.sub_can_worker.deleteLater)
+        self.sub_data_thread.finished.connect(self.sub_data_thread.deleteLater)
+
+        # 更新提示信息
+        self.sub_can_worker.sub_state_bad.connect(self.bad_sub_state_update)
+        self.sub_can_worker.sub_state_good.connect(self.good_sub_state_update)
+        self.sub_can_worker.sub_warning.connect(self.warnings_update)
+
+        # 启动订阅子线程
+        self.sub_data_thread.start()
+        zmq_monitor_logger.info("订阅子线程开始启动 ...")
+
+    def suspend_sub_data(self):
+        """暂停订阅数据"""
+        self.pushButton_4.setText("继续订阅")  # 修改按钮文字为 【继续订阅】
+        self.sub_can_worker.can_message.disconnect()  # 解除绑定 抛出数据信号和写入TableView中的槽函数
+        self.pushButton_4.clicked.disconnect()  # 解除绑定【暂停订阅】的槽函数
+        self.pushButton_4.clicked.connect(self.continue_sub_data)  # 绑定【继续订阅】的槽函数
+        self.pushButton_3.setEnabled(True)  # 恢复【重置订阅】按钮
+
+        self.update_tip.emit('LightSeaGreen', '数据显示暂停中 ...')
+        zmq_monitor_logger.info("数据显示暂停中...")
+
+    def continue_sub_data(self):
+        """继续订阅数据"""
+        self.pushButton_4.setText("暂停订阅")  # 修改按钮文字为 【暂停订阅】
+        self.sub_can_worker.can_message.connect(self.add_new_data)  # 重新绑定抛出数据信号和写入table view 的槽函数
+        self.pushButton_4.clicked.disconnect()  # 解除绑定【继续订阅】的槽函数
+        self.pushButton_4.clicked.connect(self.suspend_sub_data)  # 绑定【暂停订阅】的槽函数
+        self.pushButton_3.setEnabled(True)  # 恢复【重置订阅】按钮
+
+        self.update_tip.emit('', '')
+        zmq_monitor_logger.info("数据显示恢复！")
+
+    def reset_sub_data(self):
+        """重置整个订阅数据的流程，释放资源"""
+        # 设置标志位为False
+        ZMQSubFlag.sub_flag = False  # 停止写入ZMQ数据到队列中
+        ZMQSubFlag.get_flag = False  # 停止从队列中获取ZMQ数据
+
+        # 触发订阅子线程中的停止事件
+        self.sub_can_worker.stop_event.set()
+
+        # 清空保存总线消息的 deque
+        with threading.Lock():
+            ZMQSub.data_deque.clear()
+
+        # 恢复相关控件的状态
+        self.pushButton_2.setEnabled(True)
+        self.pushButton_5.setEnabled(True)
+        self.pushButton_6.setEnabled(True)
+        self.pushButton_4.setDisabled(True)
+        self.pushButton_3.setDisabled(True)
+        self.comboBox.setEnabled(True)
+        self.comboBox_2.setEnabled(True)
+        self.lineEdit.setEnabled(True)
+
+        # 重置之后，停止抛出系统信息
+        self.system_info.timer.stop()
+
+        self.update_tip.emit('LightSeaGreen', '订阅被重置，可随时开始重新订阅！')
+        self.update_warning.emit('transparent', '')
+        zmq_monitor_logger.info("订阅被重置，可随时开始重新订阅！")
+
+        # 将【继续订阅】恢复为【暂停订阅】
+        self.continue_sub_data()
+
+        # 清空用来写入 table view 的deque
+        self.empty_table_view()
+
+    def empty_table_view(self):
+        """清空表格中的数据"""
+        self.model.clear_data()
+        self.update_tip.emit('', '')
+        zmq_monitor_logger.info("表格中的数据被清空！.")
+
+    def add_new_data(self, message):
+        """
+        func: 在QTabelView中插入新的数据
+        :param message: 数据
+        """
+        if not self.filter_data:
+            self.model.add_message(message)
+        else:
+            # 如果点击的【应用】按钮，但是过滤窗口没有输入任何过滤条件，则同样无需进行后续处理，全部数据都显示
+            if self.and_filter_condition is dict() and self.or_filter_condition is dict():
+                self.model.add_message(message)
+            else:
+                filter_names = ["ZMQ地址", "主题", "通道ID", "数据长度", "源地址", "目的地址", "帧ID", "CID", "CAN数据"]
+                message_dict = dict(zip(filter_names, message[1:]))
+
+                for or_filter_name, or_filter_value in self.or_filter_condition.items():
+                    target_value = message_dict.get(or_filter_name).strip().lower()
+                    if target_value in or_filter_value:  # 只要满足其中一个条件，就显示该数据，后续条件无需再关注，直接判断下一条数据
+                        self.model.add_message(message)
+                        return
+
+                for and_filter_name, and_filter_value in self.and_filter_condition.items():
+                    target_value = message_dict.get(and_filter_name).strip().lower()
+                    if target_value not in and_filter_value:  # 如果有一个条件不满足，则返回，不显示
+                        return
+                # 当所有过滤条件都满足的时候，才显示该数据
+                self.model.add_message(message)
+
+    def bad_sub_state_update(self, zmq_point):
+        """
+        func: 设置ZMQ节点的订阅状态标志为红色，表示该节点没有接收到ZMQ数据
+        :param zmq_point: 没有订阅到数据的ZMQ节点地址
+        """
+        bad_items = self.tableWidget.findItems(zmq_point, QtCore.Qt.MatchExactly)
+        if bad_items:
+            row = bad_items[0].row()
+            column = bad_items[0].column()
+            bad_state_items = self.tableWidget.cellWidget(row, column - 1)
+            bad_label = bad_state_items.findChild(QLabel)
+            bad_label.setStyleSheet("background-color: red;")
+            zmq_monitor_logger.warning(f"ZMQ节点【{zmq_point}】未收到数据！")
+
+    def good_sub_state_update(self, zmq_point):
+        """
+        func: 设置ZMQ节点的订阅状态标志为绿色，表示该节点正常接收到了ZMQ数据
+        :param zmq_point: 能正常订阅的ZMQ节点地址
+        """
+        good_items = self.tableWidget.findItems(zmq_point, QtCore.Qt.MatchExactly)
+        if good_items:
+            row = good_items[0].row()
+            column = good_items[0].column()
+            bad_state_items = self.tableWidget.cellWidget(row, column - 1)
+            bad_label = bad_state_items.findChild(QLabel)
+            bad_label.setStyleSheet("background-color: green;")
+
+    def tips_update(self, level, tip):
+        """
+        func: 更新提取数据时相关的提示信息
+        :param level: 提示信息的级别，不同的级别用不同的颜色标记
+        :param tip: 提示信息的内容
+        """
+        self.label_7.setText(f"<font color={level}>{tip}</font>")
+        self.label_7.repaint()
+
+    def warnings_update(self, level, warning):
+        """
+        func: 更新提取数据时相关的提示信息
+        :param level: 提示信息的级别，不同的级别用不同的颜色标记
+        :param warning: 告警信息的内容
+        """
+        self.label_9.setText(f"<font color={level}>{warning}</font>")
+        self.label_9.repaint()
+
+    def update_cache_progressbar(self, level, percent):
+        """
+        func: 根据报上来的缓存空间使用量来设置进度条的颜色和数值
+        :param level: Green/OrangeRed/Red，用不同的颜色表示缓存空间的使用情况
+        :param percent: 缓存空间的使用百分比
+        """
+        self.progressBar.setValue(percent)
+        self.progressBar.setStyleSheet("""QProgressBar::chunk {background-color: %s;}""" % level)
+
+        if 60 < percent <= 80:
+            self.warnings_update(level, f'缓存空间已经消耗 {percent}%，请注意！')
+            zmq_monitor_logger.warning(f'缓存空间已经消耗 {percent}%，请注意！')
+        elif percent > 80:
+            self.warnings_update(level, f'缓存空间已经消耗 {percent}%，请【重置订阅】，或【重置订阅】后增大【缓存大小】，以免丢失数据！')
+            zmq_monitor_logger.critical(f'缓存空间已经消耗 {percent}%，请【重置订阅】，或【重置订阅】后增大【缓存大小】，以免丢失数据！')
+
+    def display_system_info(self):
+        """在GUI界面上显示系统的CPU、内存、订阅数据的缓存、告警信息"""
+        # 实例化获取系统信息的类
+        self.display_system_info_thread = QThread()
+        self.system_info = SystemInfo()
+        self.system_info.moveToThread(self.display_system_info_thread)
+
+        # 绑定信号
+        self.system_info.cache_info.connect(self.update_cache_progressbar)
+        self.system_info.memory_usage.connect(self.update_memory_info)
+        self.system_info.cpu_usage.connect(self.update_cpu_info)
+        self.system_info.warning_signal.connect(self.warnings_update)
+
+        # 子线程启动时，同时启动子线程中的定时器
+        if sys.platform == "win32":
+            self.display_system_info_thread.started.connect(lambda: self.system_info.start_monitoring_win(2000))
+
+        # 启动子线程
+        self.display_system_info_thread.start()
+        zmq_monitor_logger.info("显示系统信息的进程启动 ...")
+
+    def update_memory_info(self, level, process_memory, free_memory, total_memory):
+        """显示内存使用情况"""
+        self.label_14.setText(f"<font color={level}>{process_memory}/{free_memory}/{total_memory}</font>")
+        self.label_14.repaint()
+
+    def update_cpu_info(self, level, process_cpu, system_cpu):
+        """显示CPU使用情况"""
+        self.label_12.setText(f"<font color={level}>{process_cpu}/{system_cpu}</font>")
+        self.label_12.repaint()
+
+
+if __name__ == '__main__':
+    app = QApplication([])
+    window = MainWindow()
+    window.show()
+    app.exec_()

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import threading
 import time
 from collections import deque
@@ -302,3 +303,194 @@ class ZMQSuber:
             SubPointStates.bad_points.discard(addr)
         else:
             zmq_sub_logger.warning(f"缓存已满，跳过添加数据{next_zmq_message}！")
+=======
+import threading
+import time
+from collections import deque
+from datetime import datetime
+
+import zmq
+
+from log_setting import get_logger
+
+# 设置ZMQ接收数据时的超时时间（单位：毫秒）
+ZMQ_RCV_TIMEOUT = 2000
+# 设置队列的最大长度
+MAX_DEQUE_SIZE = 50000
+# 全局队列，用来保存订阅到的数据，并可以用来在多个函数之间共享
+# 此处采用双端队列deque，为的是能够在原来队列基础上调整其最大长度（普通队列 deque 创建之后，就不能修改其最大长度）
+data_deque = deque(maxlen=MAX_DEQUE_SIZE)
+
+zmq_sub_logger = get_logger("ZMQSub", "./log")
+
+
+class ZMQSubFlag:
+    """定义一个类，用来保存变量，这些类变量的值可以在不同的Python脚本之间共享"""
+    sub_flag = True  # 表示是否订阅的标志位
+    get_flag = True  # 表示是否订阅的标志位
+
+
+class SubPointStates:
+    """定义一个类，用来保存变量，这些类变量的值可以在不同的Python脚本之间共享"""
+    bad_points = set()  # 保存订阅数据异常的zmq节点地址
+    good_points = set()  # 保存订阅数据正常的zmq节点地址
+
+
+class ZMQSubWorker:
+    def __init__(self, sub_addr='tcp://localhost:8082', is_subbing=True):
+        self.sub_addr = sub_addr
+        self.is_subbing = is_subbing
+        self.lock = threading.Lock()
+        if self.sub_addr:
+            context = zmq.Context()
+            socket = context.socket(zmq.SUB)
+            socket.setsockopt_string(zmq.SUBSCRIBE, '')
+            socket.setsockopt(zmq.RCVTIMEO, ZMQ_RCV_TIMEOUT)  # 设置ZMQ接收数据的超时时间为 2000ms
+            socket.connect(self.sub_addr)
+            self.sub_socket = socket
+            zmq_sub_logger.info(f"创建了地址为【{self.sub_addr}】的ZMQ Subscribe Socket, 超时时间为 {ZMQ_RCV_TIMEOUT}ms")
+
+    def sub_theme_data(self, theme=b'', filter_string=b''):
+        """
+        func: 订阅指定主题的ZMQ总线消息
+        :param theme:   指定的主题，字符串
+        :param filter_string:  指定的过滤器，只定于包含指定字符串的消息，字符串
+        """
+        zmq_sub_logger.info(f"ZMQ节点【{self.sub_addr}】开始订阅数据, 主题为 {theme.decode('utf-8')} ...")
+        global data_deque
+
+        while ZMQSubFlag.sub_flag:
+            while self.is_subbing:  # 该标志位作用于 当用户通过ZMQ节点前面的复选框勾选，来控制定于数据的循环是否执行
+                if not ZMQSubFlag.sub_flag:  # 该标志位作用于 当没有通过ZMQ节点前面的复选框来控制订阅与否，而是只是实现点击【重置按钮】，可以跳出订阅数据的循环
+                    zmq_sub_logger.warning(f"订阅被用户重置，ZMQ节点【{self.sub_addr}】停止订阅数据！")
+                    break
+
+                # 当用户通过界面修改了缓存的长度之后，在原有data_deque的基础上修改data_deque的长度
+                if MAX_DEQUE_SIZE != data_deque.maxlen:
+                    with self.lock:
+                        data_deque = deque(data_deque, maxlen=MAX_DEQUE_SIZE)
+                    zmq_sub_logger.info(f"缓存区大小调整为{MAX_DEQUE_SIZE}。")
+
+                # 订阅字节流
+                try:
+                    zmq_message = self.sub_socket.recv()
+                except zmq.error.Again:
+                    SubPointStates.bad_points.add(self.sub_addr) if self.sub_addr not in SubPointStates.bad_points else None
+                    SubPointStates.good_points.discard(self.sub_addr)
+                    zmq_sub_logger.warning(f"ZMQ节点【{self.sub_addr}】接收主题超时，请检查是否有主题发送到ZMQ总线！")
+                    continue
+
+                # 订阅指定的主题
+                if theme in zmq_message and filter_string in zmq_message:
+                    # 收到数据的主题，主题没有经过序列化，无需反序列化
+                    # print(f'收到CAN数据的主题：{zmq_message.decode("utf-8")}')
+                    # 下一包数据就是序列化之后的数据
+                    try:
+                        next_zmq_message = self.sub_socket.recv()
+                    except zmq.error.Again:
+                        SubPointStates.bad_points.add(self.sub_addr) if self.sub_addr not in SubPointStates.bad_points else None
+                        SubPointStates.good_points.discard(self.sub_addr)
+                        zmq_sub_logger.warning(f"ZMQ节点【{self.sub_addr}】接收数据超时，请检查是否有数据发送到ZMQ总线！")
+                        continue
+
+                    if len(data_deque) != MAX_DEQUE_SIZE:
+                        with self.lock:
+                            data_deque.append({'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'), 'sub_addr': self.sub_addr, 'theme': zmq_message,
+                                               'message': next_zmq_message})
+                        SubPointStates.good_points.add(self.sub_addr) if self.sub_addr not in SubPointStates.good_points else None
+                        SubPointStates.bad_points.discard(self.sub_addr)
+                    else:
+                        zmq_sub_logger.warning("缓存已满，跳过添加该条数据！")
+                        continue
+            # 增加时间间隙，让系统切换到其他线程，否则当停止订阅时陷入死循环，来不及操作GUI界面来控制数据订阅流程，打破循环
+            time.sleep(0.001)
+        self.sub_socket.close()
+        zmq_sub_logger.info(f"地址为【{self.sub_addr}】的ZMQ Subscribe Socket 被关闭！")
+
+
+class ZMQSubThread(threading.Thread):
+    def __init__(self, sub_point, sub_theme):
+        super().__init__()
+        self.sub_point = sub_point
+        self.sub_theme = sub_theme
+        self.sub_worker = ZMQSubWorker(sub_addr=self.sub_point[0], is_subbing=self.sub_point[1])
+        self.daemon = True  # 设置子线程的 daemon=True，当主线程退出时，子线程立刻退出
+        zmq_sub_logger.info(f"ZMQ节点【{self.sub_point}】的订阅子线程创建完成，订阅主题为 {self.sub_theme.decode('utf-8')}。")
+
+    def run(self) -> None:
+        self.sub_worker.sub_theme_data(theme=self.sub_theme)
+
+
+class ZMQSuber:
+    def __init__(self, sub_points, zmq_sub_theme):
+        self.sub_points = sub_points  # 保存ZMQ订阅节点的列表
+        self.zmq_sub_theme = zmq_sub_theme  # 保存ZMQ订阅节点的列表
+        self.sub_threads = dict()  # 初始化时根据配置文件创建的全部订阅子线程
+
+        self.continue_sub_thread_names = list()  # 暂停订阅数据的子线程名称
+        self.suspend_sub_thread_names = list()  # 继续订阅数据的子线程名称
+
+        for point in self.sub_points:
+            if point[1]:
+                self.continue_sub_thread_names.append(point[0])
+            else:
+                self.suspend_sub_thread_names.append(point[0])
+
+        self.create_sub_threads()  # 初始化时根据配置文件创建订阅数据的子线程
+
+    def create_sub_threads(self):
+        """根据ZMQ节点地址创建各自的线程"""
+        if len(self.sub_points):
+            zmq_sub_logger.info(f"开始创建ZMQ订阅数据的子线程，共{len(self.sub_points)}个 ...")
+            for point in self.sub_points:
+                thread_name = point[0]  # ZMQ 节点名称
+                if thread_name not in self.sub_threads.keys():
+                    thread = ZMQSubThread(sub_point=point, sub_theme=self.zmq_sub_theme)
+                    self.sub_threads[thread_name] = thread
+        else:
+            zmq_sub_logger.warning("没有订阅节点，无需创建订阅子线程！")
+
+    def start_sub(self):
+        """启动子线程"""
+        if len(self.sub_threads):
+            for thread_name, thread in self.sub_threads.items():
+                zmq_sub_logger.info(f"ZMQ节点【{thread_name}】的订阅子线程启动 ...")
+                thread.start()
+
+            for thread_name, thread in self.sub_threads.items():
+                thread.join()
+
+    def get_update_sub_info(self, zmq_point_name, is_sub):
+        """
+        func: 将从界面上传来的ZMQ节点订阅情况分别保存到对应的列表中
+        :param zmq_point_name: ZMQ节点地址
+        :param is_sub:  Bool, 表示该ZMQ节点的数据是否被订阅
+        """
+        zmq_sub_logger.info("用户调整了订阅情况，开始检测各个ZMQ节点的最新订阅状态 ...")
+        try:
+            if is_sub and (zmq_point_name not in self.continue_sub_thread_names):
+                self.continue_sub_thread_names.append(zmq_point_name)
+                self.suspend_sub_thread_names.remove(zmq_point_name)
+            elif not is_sub and (zmq_point_name not in self.suspend_sub_thread_names):
+                self.suspend_sub_thread_names.append(zmq_point_name)
+                self.continue_sub_thread_names.remove(zmq_point_name)
+        except KeyError as e:
+            zmq_sub_logger.error(e)
+        except ValueError as e:
+            zmq_sub_logger.error(e)
+
+        zmq_sub_logger.info("订阅状态更新完成，开始调整订阅子线程 ...")
+        self.check_sub_thread()  # 更新完之后，检查线程状态
+
+    def check_sub_thread(self):
+        """ 根据订阅状态设置标志位，检查订阅线程的状态"""
+        for suspend_thread_name in self.suspend_sub_thread_names:
+            target_thread = self.sub_threads[suspend_thread_name]
+            target_thread.sub_worker.is_subbing = False
+            zmq_sub_logger.info(f"暂停订阅ZMQ节点【{suspend_thread_name}】的数据")
+
+        for continue_thread_name in self.continue_sub_thread_names:
+            target_thread = self.sub_threads[continue_thread_name]
+            target_thread.sub_worker.is_subbing = True
+            zmq_sub_logger.info(f"恢复订阅ZMQ节点【{continue_thread_name}】的数据")
+>>>>>>> 321902d3dc73b29524d2c699db34dc86494efe35

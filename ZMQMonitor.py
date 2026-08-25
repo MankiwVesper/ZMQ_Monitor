@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import psutil
+from collections import deque
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QAbstractTableModel, QModelIndex, QThread, QTimer
 from PyQt5.QtGui import QFont, QKeySequence, QIntValidator
 from PyQt5.QtWidgets import QApplication, QMainWindow, QHeaderView, QMenu, QAction, QShortcut, \
@@ -8,7 +9,8 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QHeaderView, QMenu, QActi
     QLabel, QWidget, QHBoxLayout, QPushButton, QRadioButton
 
 import ZMQSub
-from DataTransform import *
+from ConsumerWorker import ConsumerWorker
+from SubCanWorker import SubCANWorker
 from ZMQConfig import *
 from ZMQMonitorGUI import *
 from ZMQSub import *
@@ -52,7 +54,7 @@ class SystemInfo(QObject):
 
     def get_cache_percent(self):
         """监控保存ZMQ数据的缓存队列的使用情况"""
-        cache_percent = int(len(ZMQSub.data_deque) / ZMQSub.data_deque.maxlen * 100)
+        cache_percent = ZMQSub.data_buffer.size() / ZMQSub.data_buffer.max_size * 100
 
         if cache_percent <= 60:
             self.cache_info.emit('Green', cache_percent)
@@ -116,110 +118,6 @@ class SystemInfo(QObject):
         """获取软件的内存使用情况和整个系统的内存使用情况，适用于Linux系统"""
         pass
 
-
-class SubCANWorker(QObject):
-    """订阅CAN类型的ZMQ消息"""
-    can_message = pyqtSignal(list)  # 定义信号，用来抛出订阅到的CAN数据
-    stop_sub_message = pyqtSignal()  # 定义停止订阅信息的信号
-    stop_get_message = pyqtSignal()  # 定义停止获取信息的信号
-    sub_state_good = pyqtSignal(str)  # 更新提示信息的信号
-    sub_state_bad = pyqtSignal(str)  # 更新提示信息的信号
-    sub_warning = pyqtSignal(str, str)  # 更新提示信息的信号
-
-    def __init__(self, sub_points, can_zmq_theme=None):
-        super().__init__()
-        self.lock = threading.Lock()
-        self.stop_event = threading.Event()
-        if can_zmq_theme is None:
-            self.can_zmq_theme = b'CanServerData'
-        self.zmq_suber = ZMQSuber(sub_points, zmq_sub_theme=self.can_zmq_theme)
-
-
-    def _check_states(self):
-        """抛出各个ZMQ节点的数据订阅状态，能收到数据表示节点状态正常，收不到数据表示节点状态异常"""
-        while ZMQSubFlag.sub_flag:
-            for bad_point in SubPointStates.bad_points.copy():
-                self.sub_state_bad.emit(bad_point)
-
-            for good_point in SubPointStates.good_points.copy():
-                self.sub_state_good.emit(good_point)
-            # 当停止事件触发时，立刻退出循环
-            # NOTE：此处不要使用 time.sleep(2)
-            #  time.sleep()是阻塞操作，代码执行到这里的时候，就会阻塞两秒执行。
-            #  当用户点击【重置订阅】按钮之后，标志位sub_flag被置为False，但是该while循环由于time.sleep()的阻塞操作，不会立即结束循环，而是继续等待
-            #  此时，子线程 SubCANThread 已经退出被删除，而 SubCANThread 内部的 check_states() 仍在运行中，就会导致子线程报错
-            #  而使用 threading.Event().wait(2), 则表示等待两秒 或者 Event() 事件被触发——也就是说当 Event() 事件被触发时，代码在此处就不会等待，该子线程会被立即唤醒，得以继续往后执行
-            self.stop_event.wait(2)
-
-    def _warning_state(self):
-        """抛出告警信息，提示某ZMQ节点没有订阅到数据"""
-        while ZMQSubFlag.sub_flag:
-            for bad_point in SubPointStates.bad_points.copy():
-                self.sub_warning.emit('Red', f'节点【{bad_point}】没有订阅到数据，可能是ZMQ接收超时，可尝试提高超时时间。如果还未收到数据，请检查是否有数据发送出来！')
-                self.stop_event.wait(2)
-
-            self.sub_warning.emit('transparent', '')
-            self.stop_event.wait(2)  # NOTE：用法同上面的 check_states() 函数
-
-    @staticmethod
-    def _bytes2can(bytes_message):
-        """
-        func: 将ZMQ总线数据转换为CAN格式的数据
-        :param bytes_message: ZMQ总线数据
-        :return: 元组，(通道ID，数据长度，源地址，目的地址，帧ID, CID，数据)，每个字段均为字符串
-        """
-        can_data = CANData()
-        frame_id, channel_id, data_len, data = can_data.get_can_data(bytes_message)
-        # data部分原来是一个列表，其中的元素为十进制整数
-        frame_id_bin = bin(frame_id)  # 首先计算帧ID的二进制形式
-        # 通过帧ID计算源地址、目的地址、CID
-        cid = hex(int(frame_id_bin[-5:-1], 2))[2:].upper().rjust(2, '0')
-        smac = hex(int(frame_id_bin[-13:-5], 2))[2:].upper().rjust(2, '0')
-        dmac = hex(int(frame_id_bin[-21:-13], 2))[2:].upper().rjust(2, '0')
-
-        # 计算帧ID的十六进制形式
-        frame_id = hex(frame_id)[2:].upper()
-
-        # 现在将每个元素转换为16进制，并用空格将所有元素组合成一整个字符串，方便后续写入和用户查看
-        # 转成16进制时，右对齐，不足两位的高位填充 0；且16进制前面不带 0x,，字母大写，不包括CID
-        data = ' '.join([hex(item)[2:].upper().rjust(2, '0') for item in list(data)[1:data_len]])
-        data_len = data_len - 1  # 只包含CAN数据的长度，不包含CID
-
-        return [str(channel_id), str(data_len), smac, dmac, frame_id, cid, data]
-
-    def _get_zmq_can(self):
-        """从队列中获取订阅到的数据，并通过信号的形式抛出"""
-        while ZMQSubFlag.get_flag:
-            try:
-                with self.lock:
-                    message = ZMQSub.data_deque.popleft()
-                    self.can_message.emit(
-                        [message['time'], message['sub_addr'], message['theme'].decode('utf-8'), *(self._bytes2can(message['message']))])  # 将数据以信号的方式抛出
-            except IndexError:
-                # print("缓存中没有数据，跳过！")
-                # 增加时间间隙，让系统切换到其他线程，否则会导致GUI界面卡顿
-                time.sleep(0.001)
-                continue
-
-        self.stop_get_message.emit()
-
-    def sub_can_data(self):
-        """启动保存CAN数据和消费CAN数据的子线程"""
-        # daemon=True，当主线程退出时，子线程立即退出
-        get_can_thread = threading.Thread(target=self._get_zmq_can, daemon=True)
-        check_sub_thread = threading.Thread(target=self._check_states, daemon=True)
-        warning_sub_thread = threading.Thread(target=self._warning_state, daemon=True)
-
-        get_can_thread.start()
-        check_sub_thread.start()
-        warning_sub_thread.start()
-
-        # 不再额外创建 sub_can_thread 线程，
-        # 当前sub_can_data()本身已经运行在QThread线程中，因此直接在这里执行ZMQ订阅函数即可
-        self.zmq_suber.start_sub()
-
-        # start_sub()函数执行完毕，说明ZMQ订阅线程已经结束，接下来需要等待消费数据的线程也结束
-        get_can_thread.join()
 
 class CANTableModel(QAbstractTableModel):
     def __init__(self, headers, max_size=10000):
@@ -465,6 +363,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.display_system_info()
 
+        # 定时刷新ZMQ节点订阅状态
+        self.sub_state_timer = QTimer(self)
+        self.sub_state_timer.start(2000)  # 每秒更新一次订阅状态
+        self.sub_state_timer.timeout.connect(self.update_sub_state)
+
     def closeEvent(self, event):
         """
         func: 主窗口关闭时，关闭所有窗口
@@ -487,9 +390,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def set_cache_length(self, length):
         """
         func: 设置保存数据的队列长度的变量
-        :param length: 需要设置的长度值
+        :param length: 新的队列长度
         """
-        ZMQSub.MAX_QUEUE_SIZE = int(length)
+        ZMQSub.data_buffer.resize(int(length))
+
         if hasattr(self, 'system_info'):
             self.system_info.get_cache_percent()
         zmq_monitor_logger.info(f"设置ZMQ订阅缓冲区的长度为 {length}。")
@@ -1042,7 +946,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return
 
         ZMQSubFlag.sub_flag = True  # 恢复写入ZMQ数据到队列中
-        ZMQSubFlag.get_flag = True  # 恢复从队列中获取ZMQ数据
 
         self.empty_table_view()  # 清空表格中上次残留的数据
         self.update_tip.emit('', '')  # 清空提示信息
@@ -1083,29 +986,44 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.sub_can_worker.moveToThread(self.sub_data_thread)
 
         # 订阅数据的子线程开始之后，调用获取数据的函数
-        self.sub_data_thread.started.connect(self.sub_can_worker.sub_can_data)
-
-        # 收到can_message信号之后，将数据插入到 TableView中
-        self.sub_can_worker.can_message.connect(self.add_new_data)
+        self.sub_data_thread.started.connect(self.sub_can_worker.run)
 
         # 停止订阅后 删除相关线程
-        self.sub_can_worker.stop_get_message.connect(self.sub_data_thread.quit)
-        self.sub_can_worker.stop_get_message.connect(self.sub_can_worker.deleteLater)
+        self.sub_can_worker.stop_sub_message.connect(self.sub_data_thread.quit)
+        self.sub_can_worker.stop_sub_message.connect(self.sub_can_worker.deleteLater)
         self.sub_data_thread.finished.connect(self.sub_data_thread.deleteLater)
 
-        # 更新提示信息
-        self.sub_can_worker.sub_state_bad.connect(self.bad_sub_state_update)
-        self.sub_can_worker.sub_state_good.connect(self.good_sub_state_update)
-        self.sub_can_worker.sub_warning.connect(self.warnings_update)
+        # 创建消费CAN数据的子线程
+        zmq_monitor_logger.info("消费子线程开始创建 ...")
+        self.consume_data_thread = QThread()
+        self.consume_can_worker = ConsumerWorker(ZMQSub.data_buffer)
+        self.consume_can_worker.moveToThread(self.consume_data_thread)
 
-        # 启动订阅子线程
+        # 消费数据的子线程开始之后，调用消费数据的函数
+        self.consume_data_thread.started.connect(self.consume_can_worker.run)
+
+        # 收到can_message信号之后，将数据插入到 TableView中
+        self.consume_can_worker.can_message.connect(self.add_new_data)
+
+        # 停止订阅后 删除相关线程
+        self.consume_can_worker.stop_get_message.connect(self.consume_data_thread.quit)
+        self.consume_can_worker.stop_get_message.connect(self.consume_can_worker.deleteLater)
+        self.consume_data_thread.finished.connect(self.consume_data_thread.deleteLater)
+
+        # 启动订阅、消费子线程
         self.sub_data_thread.start()
         zmq_monitor_logger.info("订阅子线程开始启动 ...")
+        self.consume_data_thread.start()
+        zmq_monitor_logger.info("消费子线程开始启动 ...")
+
+        # 定时刷新ZMQ节点订阅状态
+        self.sub_state_timer.start()
+        zmq_monitor_logger.info("刷新节点订阅状态的定时器开始启动 ...")
 
     def suspend_sub_data(self):
         """暂停订阅数据"""
         self.pushButton_4.setText("继续订阅")  # 修改按钮文字为 【继续订阅】
-        self.sub_can_worker.can_message.disconnect()  # 解除绑定 抛出数据信号和写入TableView中的槽函数
+        self.consume_can_worker.can_message.disconnect(self.add_new_data)  # 解除绑定 抛出数据信号和写入TableView中的槽函数
         self.pushButton_4.clicked.disconnect()  # 解除绑定【暂停订阅】的槽函数
         self.pushButton_4.clicked.connect(self.continue_sub_data)  # 绑定【继续订阅】的槽函数
         self.pushButton_3.setEnabled(True)  # 恢复【重置订阅】按钮
@@ -1116,7 +1034,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def continue_sub_data(self):
         """继续订阅数据"""
         self.pushButton_4.setText("暂停订阅")  # 修改按钮文字为 【暂停订阅】
-        self.sub_can_worker.can_message.connect(self.add_new_data)  # 重新绑定抛出数据信号和写入table view 的槽函数
+        self.consume_can_worker.can_message.connect(self.add_new_data)  # 重新绑定抛出数据信号和写入table view 的槽函数
         self.pushButton_4.clicked.disconnect()  # 解除绑定【继续订阅】的槽函数
         self.pushButton_4.clicked.connect(self.suspend_sub_data)  # 绑定【暂停订阅】的槽函数
         self.pushButton_3.setEnabled(True)  # 恢复【重置订阅】按钮
@@ -1126,16 +1044,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def reset_sub_data(self):
         """重置整个订阅数据的流程，释放资源"""
-        # 设置标志位为False
-        ZMQSubFlag.sub_flag = False  # 停止写入ZMQ数据到队列中
-        ZMQSubFlag.get_flag = False  # 停止从队列中获取ZMQ数据
 
-        # 触发订阅子线程中的停止事件
-        self.sub_can_worker.stop_event.set()
+        ZMQSubFlag.sub_flag = False  # 停止ZMQ订阅
+
+        # 停止刷新ZMQ节点订阅状态的定时器
+        self.sub_state_timer.stop()
+
+        # 停止消费者线程
+        self.consume_can_worker.stop()
 
         # 清空保存总线消息的 deque
-        with threading.Lock():
-            ZMQSub.data_deque.clear()
+        ZMQSub.data_buffer.clear()
 
         # 恢复相关控件的状态
         self.pushButton_2.setEnabled(True)
@@ -1147,15 +1066,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.comboBox_2.setEnabled(True)
         self.lineEdit.setEnabled(True)
 
-        # 重置之后，停止抛出系统信息
-        self.system_info.timer.stop()
-
         self.update_tip.emit('LightSeaGreen', '订阅被重置，可随时开始重新订阅！')
         self.update_warning.emit('transparent', '')
         zmq_monitor_logger.info("订阅被重置，可随时开始重新订阅！")
 
-        # 将【继续订阅】恢复为【暂停订阅】
-        self.continue_sub_data()
+        # 将【暂停/继续】按钮恢复为初始的【暂停订阅】状态
+        self.pushButton_4.setText("暂停订阅")  # 修改按钮文字为 【暂停订阅】
+        self.pushButton_4.clicked.disconnect()  # 解除绑定【继续订阅】的槽函数
+        self.pushButton_4.clicked.connect(self.suspend_sub_data)  # 绑定【暂停订阅】的槽函数
 
         # 清空用来写入 table view 的deque
         self.empty_table_view()
@@ -1285,6 +1203,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """显示CPU使用情况"""
         self.label_12.setText(f"<font color={level}>{process_cpu}/{system_cpu}</font>")
         self.label_12.repaint()
+
+    def update_sub_state(self):
+        """刷新各ZMQ节点的订阅状态和告警信息"""
+        bad_points = SubPointStates.bad_points.copy()
+        good_points = SubPointStates.good_points.copy()
+
+        for bad_point in bad_points:
+            self.bad_sub_state_update(bad_point)
+
+        for good_point in good_points: 
+            self.good_sub_state_update(good_point)
+
+        if bad_points:
+            bad_points = next(iter(bad_points))
+
+            self.warnings_update('Red', f'ZMQ节点【{bad_points}】未收到数据，请检查！')
+        else:
+            self.warnings_update('LightSeaGreen', '所有ZMQ节点都正常接收数据！')
 
 
 if __name__ == '__main__':

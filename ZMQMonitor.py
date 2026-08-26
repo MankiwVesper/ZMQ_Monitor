@@ -20,48 +20,20 @@ zmq_monitor_logger = get_logger("ZMQMonitor", "./log")
 
 
 class SystemInfo(QObject):
-    cache_info = pyqtSignal(str, int)  # 更新提示信息的信号
     memory_usage = pyqtSignal(str, str, str, str)  # 内存使用数据，级别，本软件使用的内存，系统的剩余内存，系统总内存
     cpu_usage = pyqtSignal(str, str, str)  # CUP使用情况，级别，本软件使用的CPU，系统总的CPU使用
-    warning_signal = pyqtSignal(str, str)  # 告警信号，级别，告警内容
+    warning_signal = pyqtSignal(str, str, str)  # 告警来源，级别，告警内容
 
     def __init__(self):
         super().__init__()
         self.process_name = os.path.basename(sys.argv[0])
         self.process_id = psutil.Process(os.getpid())
 
-    def start_monitoring_win(self, interval=1000):
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.get_systime_info_win)
-        self.timer.start(interval)
-
-    def start_monitoring_linux(self, interval=1000):
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.get_systime_info_linux)
-        self.timer.start(interval)
-
-    def get_systime_info_win(self):
-        """获取Windows系统的信息"""
+    def get_system_info_win(self):
+        """获取Windows系统资源的使用信息"""
         self.get_cpu_info_win()
         self.get_memory_info_win()
-        self.get_cache_percent()
 
-    def get_systime_info_linux(self):
-        """获取Linux系统的信息"""
-        self.get_cpu_info_linux()
-        self.get_memory_info_linux()
-        self.get_cache_percent()
-
-    def get_cache_percent(self):
-        """监控保存ZMQ数据的缓存队列的使用情况"""
-        cache_percent = ZMQSub.data_buffer.size() / ZMQSub.data_buffer.max_size * 100
-
-        if cache_percent <= 60:
-            self.cache_info.emit('Green', cache_percent)
-        elif 60 < cache_percent <= 80:
-            self.cache_info.emit('OrangeRed', cache_percent)
-        else:
-            self.cache_info.emit('Red', cache_percent)
 
     def get_cpu_info_win(self):
         """获取软件的CPU使用情况和整个系统的CPU使用情况，适用于Windows系统"""
@@ -72,14 +44,11 @@ class SystemInfo(QObject):
         process_cpu_usage = self.process_id.cpu_percent(interval=None) / psutil.cpu_count() + 1.0 * psutil.cpu_count()  # 修正
 
         if total_cpu_usage > 80.0 or process_cpu_usage > 30.0:
-            self.cpu_usage.emit("Red", f'{process_cpu_usage:.2f}', f'{total_cpu_usage:.2f}')
-            self.warning_signal.emit("Red", 'CPU使用率偏高，请注意！')
+            self.cpu_usage.emit("Red", f"{process_cpu_usage:.2f}", f"{total_cpu_usage:.2f}")
+            self.warning_signal.emit("cpu", "Red", "CPU使用率偏高，请注意！")
         else:
-            self.cpu_usage.emit("Black", f'{process_cpu_usage:.2f}', f'{total_cpu_usage:.2f}')
-
-    def get_cpu_info_linux(self):
-        """获取软件的CPU使用情况和整个系统的CPU使用情况，适用于Linux系统"""
-        pass
+            self.cpu_usage.emit("Black", f"{process_cpu_usage:.2f}", f"{total_cpu_usage:.2f}")
+            self.warning_signal.emit("cpu", "", "")
 
     def get_memory_info_win(self):
         """获取软件的内存使用情况和整个系统的内存使用情况，适用于Windows系统"""
@@ -104,19 +73,16 @@ class SystemInfo(QObject):
 
         if process_memory > 500.0:
             self.memory_usage.emit("Red", f"{process_memory:.2f}", f"{free_memory:.2f}", f"{total_memory:.2f}")
-            self.warning_signal.emit("Red", '本程序的内存使用超过500MB，可能存在内存泄露，请注意！')
+            self.warning_signal.emit("memory", "Red", "本程序的内存使用超过500MB，可能存在内存泄露，请注意！")
             return
 
         if free_memory / total_memory < 0.25:
             self.memory_usage.emit("Red", f"{process_memory:.2f}", f"{free_memory:.2f}", f"{total_memory:.2f}")
-            self.warning_signal.emit("Red", '系统内存使用率超过75%，请注意！')
+            self.warning_signal.emit("memory", "Red", "系统内存使用率超过75%，请注意！")
             return
 
         self.memory_usage.emit("Black", f"{process_memory:.2f}", f"{free_memory:.2f}", f"{total_memory:.2f}")
-
-    def get_memory_info_linux(self):
-        """获取软件的内存使用情况和整个系统的内存使用情况，适用于Linux系统"""
-        pass
+        self.warning_signal.emit("memory", "", "")
 
 
 class CANTableModel(QAbstractTableModel):
@@ -339,7 +305,6 @@ class MultiFrameDialog(QDialog):
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     update_tip = pyqtSignal(str, str)  # 更新提示信息的信号
-    update_warning = pyqtSignal(str, str)  # 更新告警信息的信号
 
     # 定义字段对应的消息索引
     FILTER_FIELD_INDEX = {
@@ -397,6 +362,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 给【应用】按钮绑定槽函数
         self.pushButton_8.clicked.connect(self.apply_filter)
 
+        # 将更新提示信息的信号绑定到用来在界面显示的函数
+        self.update_tip.connect(self.tips_update)
+
         # 将下拉框中初始设置的缓存大小和超时时间传递给对应的参数
         self.set_cache_length(self.comboBox.currentText())
         self.set_receive_timeout(self.comboBox_2.currentText())
@@ -406,23 +374,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 当用户选择不同的超时时间时，设置ZMQ接收数据的超时时间
         self.comboBox_2.currentIndexChanged[str].connect(self.set_receive_timeout)
 
-        # 是否过滤数据的标志位，默认不过滤
+        # 是否过滤数据，默认不过滤
         self.filter_data = False
-
-        # 将更新提示信息的信号绑定到用来在界面显示的函数
-        self.update_tip.connect(self.tips_update)
-        self.update_warning.connect(self.warnings_update)
-
-        self.display_system_info()
-
-        # 定时刷新ZMQ节点订阅状态
-        self.sub_state_timer = QTimer(self)
-        self.sub_state_timer.start(2000)  # 每秒更新一次订阅状态
-        self.sub_state_timer.timeout.connect(self.update_sub_state)
 
         # 用来保存进行实时数据过滤的规则
         self.and_filter_rules = []
         self.or_filter_rules = []
+
+        # 用来保存上一次缓存队列的丢弃数据量，用于避免日志每两秒重复写同一条告警
+        self.last_buffer_drop_count = 0
+
+        # 用来保存缓存队列的告警状态，避免日志每两秒重复写同一条告警
+        # normal   → <= 60%，没有丢数据
+        # warning  → 60% ~ 80%，没有丢数据
+        # danger   → > 80%，没有丢数据
+        # dropped  → drop_count > 0
+        self.cache_warning_state = "normal"
+
+        # 统一告警状态
+        self.warning_states = {
+            "cpu": None,
+            "memory": None,
+            "buffer": None,
+            "sub": None,
+            "operation": None
+        }
+
+        # 定时显示系统信息
+        self.display_system_info()
+
+        # 创建定时器，定时刷新ZMQ节点订阅状态
+        self.sub_state_timer = QTimer(self)
+        self.sub_state_timer.setInterval(2000)  # 每2秒更新一次订阅状态
+        self.sub_state_timer.timeout.connect(self.update_sub_state)
+
+        # 创建定时器，定时刷新缓存使用情况
+        self.buffer_status_timer = QTimer(self)
+        self.buffer_status_timer.setInterval(1000)  # 每秒更新一次缓存使用情况
+        self.buffer_status_timer.timeout.connect(self.check_buffer_status)
+        self.buffer_status_timer.start()
 
     def closeEvent(self, event):
         """
@@ -450,8 +440,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         ZMQSub.data_buffer.resize(int(length))
 
-        if hasattr(self, 'system_info'):
-            self.system_info.get_cache_percent()
+        if hasattr(self, 'buffer_status_timer'):
+            self.check_buffer_status()
         zmq_monitor_logger.info(f"设置ZMQ订阅缓冲区的长度为 {length}。")
 
     @staticmethod
@@ -1009,8 +999,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         zmq_points = self.get_zmq_point_paras()
         if not zmq_points:
             zmq_monitor_logger.warning(f"用户没有添加ZMQ订阅节点，请先添加节点再开始订阅！")
-            self.update_warning.emit('OrangeRed', '没有ZMQ订阅节点，请先添加节点再开始订阅！')
+            self.set_warning_state('operation', 'OrangeRed', '没有ZMQ订阅节点，请先添加节点再开始订阅！')
             return
+        
+        self.set_warning_state('operation', '', '') # 清除之前的告警信息
 
         ZMQSubFlag.sub_flag = True  # 恢复写入ZMQ数据到队列中
 
@@ -1123,6 +1115,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 清空保存总线消息的 deque
         ZMQSub.data_buffer.clear()
 
+        # 清除之前的告警信息
+        self.set_warning_state("operation", "", "")
+        self.set_warning_state("sub", "", "")
+        self.set_warning_state("buffer", "", "")
+
+        # 恢复缓存的初始参数状态
+        self.cache_warning_state = "normal"
+        self.last_buffer_drop_count = 0
+
         # 恢复相关控件的状态
         self.pushButton_2.setEnabled(True)
         self.pushButton_5.setEnabled(True)
@@ -1134,7 +1135,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lineEdit.setEnabled(True)
 
         self.update_tip.emit('LightSeaGreen', '订阅被重置，可随时开始重新订阅！')
-        self.update_warning.emit('transparent', '')
         zmq_monitor_logger.info("订阅被重置，可随时开始重新订阅！")
 
         # 将【暂停/继续】按钮恢复为初始的【暂停订阅】状态
@@ -1208,8 +1208,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self._should_display_message(message):
                 display_messages.append(message)
 
-            if display_messages:
-                self.model.add_messages(display_messages)
+        if display_messages:
+            self.model.add_messages(display_messages)
 
     def bad_sub_state_update(self, zmq_point):
         """
@@ -1256,42 +1256,119 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.label_9.setText(f"<font color={level}>{warning}</font>")
         self.label_9.repaint()
 
-    def update_cache_progressbar(self, level, percent):
+    def set_warning_state(self, source, level="", message=""):
+        """设置某个告警源的当前状态"""
+        if message:
+            self.warning_states[source] = {
+                "level": level,
+                "message": message
+            }
+        else:
+            self.warning_states[source] = None
+
+        self.refresh_warning_display()
+
+    def refresh_warning_display(self):
+        """根据所有当前有效告警，统一刷新告警区域"""
+        active_warnings = [warning for warning in self.warning_states.values() if warning is not None]
+
+        # 当前没有任何告警
+        if not active_warnings:
+            self.warnings_update("transparent", "")
+            return
+
+        # 告警颜色优先级
+        level_priority = {
+            "OrangeRed": 1,
+            "Red": 2
+        }
+
+        # 有多个告警时，显示最高严重级别的颜色
+        highest_warning = max(
+            active_warnings, key=lambda warning: level_priority.get(warning["level"], 0)
+        )
+
+        level = highest_warning["level"]
+
+        # 同时显示所有当前有效告警
+        message = ";".join(warning["message"] for warning in active_warnings)
+
+        self.warnings_update(level, message)
+
+    def update_cache_progressbar(self, percent, drop_count):
         """
-        func: 根据报上来的缓存空间使用量来设置进度条的颜色和数值
-        :param level: Green/OrangeRed/Red，用不同的颜色表示缓存空间的使用情况
+        func: 根据报上来的缓存空间使用量来设置进度条的颜色和数值;更新缓存使用情况和缓存数据覆盖状态
         :param percent: 缓存空间的使用百分比
+        :param drop_count: 缓存队列中丢弃的数据量
         """
+        # 判断当前缓存状态
+        if drop_count > 0:
+            new_state = "dropped"  # 表示已经发生数据覆盖
+        elif percent > 80:
+            new_state = "danger"  # 表示缓存空间已经严重消耗
+        elif percent > 60:
+            new_state = "warning"
+        else:
+            new_state = "normal"
+
+        # 每种状态对应的显示颜色
+        level_map = {
+            "normal": "Green",
+            "warning": "OrangeRed",
+            "danger": "Red",
+            "dropped": "Red"
+        }
+
+        level = level_map[new_state]
+
+        # 更新进度条
         self.progressBar.setValue(percent)
         self.progressBar.setStyleSheet("""QProgressBar::chunk {background-color: %s;}""" % level)
 
-        if 60 < percent <= 80:
-            self.warnings_update(level, f'缓存空间已经消耗 {percent}%，请注意！')
-            zmq_monitor_logger.warning(f'缓存空间已经消耗 {percent}%，请注意！')
-        elif percent > 80:
-            self.warnings_update(level, f'缓存空间已经消耗 {percent}%，请【重置订阅】，或【重置订阅】后增大【缓存大小】，以免丢失数据！')
-            zmq_monitor_logger.critical(f'缓存空间已经消耗 {percent}%，请【重置订阅】，或【重置订阅】后增大【缓存大小】，以免丢失数据！')
+        # 已经实际发生数据覆盖
+        if new_state == "dropped":
+            warning_msg = f'缓存区已经发生数据覆盖，累计丢弃 {drop_count} 条数据，本轮监控结果可能不完整！'
+            self.set_warning_state("buffer", level, warning_msg)
 
-    def display_system_info(self):
-        """在GUI界面上显示系统的CPU、内存、订阅数据的缓存、告警信息"""
-        # 实例化获取系统信息的类
-        self.display_system_info_thread = QThread()
-        self.system_info = SystemInfo()
-        self.system_info.moveToThread(self.display_system_info_thread)
+            # drop_count发生变化时才记录一次日志，避免定时器每次执行都重复记录相同的日志
+            if drop_count != self.last_buffer_drop_count:
+                zmq_monitor_logger.critical(warning_msg)
+                self.last_buffer_drop_count = drop_count
 
-        # 绑定信号
-        self.system_info.cache_info.connect(self.update_cache_progressbar)
-        self.system_info.memory_usage.connect(self.update_memory_info)
-        self.system_info.cpu_usage.connect(self.update_cpu_info)
-        self.system_info.warning_signal.connect(self.warnings_update)
+            self.cache_warning_state = new_state
+            return
 
-        # 子线程启动时，同时启动子线程中的定时器
-        if sys.platform == "win32":
-            self.display_system_info_thread.started.connect(lambda: self.system_info.start_monitoring_win(2000))
+        # drop_count恢复为0时，说明已经开始了新一轮监控
+        self.last_buffer_drop_count = 0
 
-        # 启动子线程
-        self.display_system_info_thread.start()
-        zmq_monitor_logger.info("显示系统信息的进程启动 ...")
+        # 状态没有变化，不重复告警
+        if new_state == self.cache_warning_state:
+            return
+
+        # 状态发生变化
+        self.cache_warning_state = new_state
+
+        if new_state == "warning":
+            warning_msg = f'缓存空间已经消耗 {percent}%，请注意！'
+            self.set_warning_state("buffer", "OrangeRed", warning_msg)
+            zmq_monitor_logger.warning(warning_msg)
+        elif new_state == "danger":
+            warning_msg = f'缓存空间已经消耗 {percent}%，请【重置订阅】，或【重置订阅】后增大【缓存大小】，以免丢失数据！'
+            self.set_warning_state("buffer", "Red", warning_msg)
+            zmq_monitor_logger.critical(warning_msg)
+        elif new_state == "normal":
+            self.set_warning_state("buffer", "", "")
+            zmq_monitor_logger.info(f"缓存使用率恢复正常，当前为{percent}%")
+
+    def check_buffer_status(self):
+        """检查ZMQ数据缓存的使用状态"""
+        status = ZMQSub.data_buffer.get_status()
+
+        percent = int(status["size"] / status["max_size"] * 100)
+        
+        drop_count = status["drop_count"]
+
+        self.update_cache_progressbar(percent, drop_count)
 
     def update_memory_info(self, level, process_memory, free_memory, total_memory):
         """显示内存使用情况"""
@@ -1302,6 +1379,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """显示CPU使用情况"""
         self.label_12.setText(f"<font color={level}>{process_cpu}/{system_cpu}</font>")
         self.label_12.repaint()
+
+    def display_system_info(self):
+        """在GUI界面上显示系统的CPU、内存使用情况"""
+        # 创建系统信息采集对象
+        self.system_info = SystemInfo()
+
+        # 绑定系统状态信号和系统告警信息信号
+        self.system_info.cpu_usage.connect(self.update_cpu_info)
+        self.system_info.memory_usage.connect(self.update_memory_info)
+        self.system_info.warning_signal.connect(self.set_warning_state)
+
+        # 创建系统信息刷新定时器
+        self.system_info_timer = QTimer(self)
+        self.system_info_timer.setInterval(2000)
+        self.system_info_timer.timeout.connect(self.system_info.get_system_info_win)
+
+        # 启动定时器
+        self.system_info_timer.start()
+
+        zmq_monitor_logger.info("系统信息定时刷新启动...")
 
     def update_sub_state(self):
         """刷新各ZMQ节点的订阅状态和告警信息"""
@@ -1316,10 +1413,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if bad_points:
             bad_points = next(iter(bad_points))
-
-            self.warnings_update('Red', f'ZMQ节点【{bad_points}】未收到数据，请检查！')
+            bad_points_text = "、".join(sorted(bad_points))
+            self.set_warning_state("sub", "Red", f"ZMQ节点【{bad_points_text}】未收到数据，请检查！")
         else:
-            self.warnings_update('LightSeaGreen', '所有ZMQ节点都正常接收数据！')
+            self.set_warning_state("sub", "", "")
 
 
 if __name__ == '__main__':

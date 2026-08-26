@@ -168,7 +168,7 @@ class CANTableModel(QAbstractTableModel):
     def add_message(self, message):
         """在QTableView中插入新的订阅到的数据"""
         # 当数据量超过最大行数时，删除旧数据
-        if len(self._messages) >= self.max_size:
+        if len(self._messages) > self.max_size:
             self.beginRemoveRows(QModelIndex(), self.max_size - 1, self.max_size - 1)
             self._messages.pop()  # 删除最旧的数据（从队列尾部删除）
             self.endRemoveRows()
@@ -176,6 +176,45 @@ class CANTableModel(QAbstractTableModel):
         # 插入新数据到最开始的位置
         self.beginInsertRows(QModelIndex(), 0, 0)
         self._messages.appendleft(message)  # 在队列 deque() 的左侧插入新数据，时间复杂度为 O(1)
+        self.endInsertRows()
+
+    def add_messages(self, messages):
+        """批量插入多条数据，最新数据仍然显示在最上方"""
+        if not messages:
+            return None
+
+        # 如果单批数据已经超过最大显示容量，
+        # 只需要保留这一批中最新的 max_size 条
+        if len(messages) >= self.max_size:
+            self.beginResetModel()
+            self._messages.clear()
+
+            # messages顺序为 [旧 -> 新]
+            # extendleft 是逐个插入，因此正好变成 [新 -> 旧]
+            self._messages.extendleft(messages[-self.max_size:])
+
+            self.endResetModel()
+
+            return
+
+        # 先计算加入新数据之后需要删除多少旧数据
+        remove_count = max(0, len(self._messages) + len(messages) - self.max_size)
+
+        # 删除最旧的数据
+        if remove_count > 0:
+            start_row = len(self._messages) - remove_count
+            end_row = len(self._messages) - 1
+
+            self.beginRemoveRows(QModelIndex(), start_row, end_row)
+
+            for _ in range(remove_count):
+                self._messages.pop()
+
+            self.endRemoveRows()
+
+        # 批量插入到顶部
+        self.beginInsertRows(QModelIndex(), 0, len(messages) - 1)
+        self._messages.extendleft(messages)
         self.endInsertRows()
 
     def clear_data(self):
@@ -302,6 +341,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     update_tip = pyqtSignal(str, str)  # 更新提示信息的信号
     update_warning = pyqtSignal(str, str)  # 更新告警信息的信号
 
+    # 定义字段对应的消息索引
+    FILTER_FIELD_INDEX = {
+        "ZMQ地址": 1,
+        "主题": 2,
+        "通道ID": 3,
+        "数据长度": 4,
+        "源地址": 5,
+        "目的地址": 6,
+        "帧ID": 7,
+        "CID": 8,
+        "CAN数据": 9
+    }
+
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setupUi(self)
@@ -367,6 +419,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.sub_state_timer = QTimer(self)
         self.sub_state_timer.start(2000)  # 每秒更新一次订阅状态
         self.sub_state_timer.timeout.connect(self.update_sub_state)
+
+        # 用来保存进行实时数据过滤的规则
+        self.and_filter_rules = []
+        self.or_filter_rules = []
 
     def closeEvent(self, event):
         """
@@ -625,6 +681,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def clear_filter_condition(self):
         """点击【清除】按钮，清除所有过滤条件，恢复所有过滤关系为AND"""
         self.filter_data = False  # 恢复标志位
+        # 清空过滤条件规则
+        self.and_filter_rules = []
+        self.or_filter_rules = []
+        # 清空过滤条件
+        self.and_filter_condition = {}
+        self.or_filter_condition = {}
+
         row_position = self.tableWidget_2.rowCount()
         # 将【目标值】的内容清空
         for row in range(row_position):
@@ -665,12 +728,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # NOTE: 两种情况是不一样的，需要单独处理 第一种情况
             if value[0].strip() != '':
                 # 对过滤条件进行处理：获取单元格中用户输入的内容之后，去除两侧的空白字符，替换全角分号为半角分号，小写，替换帧ID中的0x，以半角分号分割字符串为列表
-                filters = [item.strip() for item in value[0].strip().replace('；', ';').lower().replace('0x', '').split(';')]
+                filters = {item.strip() for item in value[0].strip().replace('；', ';').lower().replace('0x', '').split(';')}
                 # 分别保存 AND 和 OR 的过滤条件
                 if value[1]:
                     self.and_filter_condition[name] = filters
                 else:
                     self.or_filter_condition[name] = filters
+
+        self.and_filter_rules = [(self.FILTER_FIELD_INDEX[field_name], filter_values) for field_name, filter_values in self.and_filter_condition.items()]
+        self.or_filter_rules = [(self.FILTER_FIELD_INDEX[field_name], filter_values) for field_name, filter_values in self.or_filter_condition.items()]
+
         # 更新提示信息
         if self.and_filter_condition or self.or_filter_condition:
             self.update_tip.emit('LightSeaGreen', '数据正在被过滤 ...')
@@ -1002,8 +1069,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 消费数据的子线程开始之后，调用消费数据的函数
         self.consume_data_thread.started.connect(self.consume_can_worker.run)
 
-        # 收到can_message信号之后，将数据插入到 TableView中
-        self.consume_can_worker.can_message.connect(self.add_new_data)
+        # 收到can_messages信号之后，将数据插入到 TableView中
+        self.consume_can_worker.can_messages.connect(self.add_new_datas)
 
         # 停止订阅后 删除相关线程
         self.consume_can_worker.stop_get_message.connect(self.consume_data_thread.quit)
@@ -1023,7 +1090,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def suspend_sub_data(self):
         """暂停订阅数据"""
         self.pushButton_4.setText("继续订阅")  # 修改按钮文字为 【继续订阅】
-        self.consume_can_worker.can_message.disconnect(self.add_new_data)  # 解除绑定 抛出数据信号和写入TableView中的槽函数
+        self.consume_can_worker.can_messages.disconnect(self.add_new_datas)  # 解除绑定 抛出数据信号和写入TableView中的槽函数
         self.pushButton_4.clicked.disconnect()  # 解除绑定【暂停订阅】的槽函数
         self.pushButton_4.clicked.connect(self.continue_sub_data)  # 绑定【继续订阅】的槽函数
         self.pushButton_3.setEnabled(True)  # 恢复【重置订阅】按钮
@@ -1034,7 +1101,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def continue_sub_data(self):
         """继续订阅数据"""
         self.pushButton_4.setText("暂停订阅")  # 修改按钮文字为 【暂停订阅】
-        self.consume_can_worker.can_message.connect(self.add_new_data)  # 重新绑定抛出数据信号和写入table view 的槽函数
+        self.consume_can_worker.can_messages.connect(self.add_new_datas)  # 重新绑定抛出数据信号和写入table view 的槽函数
         self.pushButton_4.clicked.disconnect()  # 解除绑定【继续订阅】的槽函数
         self.pushButton_4.clicked.connect(self.suspend_sub_data)  # 绑定【暂停订阅】的槽函数
         self.pushButton_3.setEnabled(True)  # 恢复【重置订阅】按钮
@@ -1084,33 +1151,65 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.update_tip.emit('', '')
         zmq_monitor_logger.info("表格中的数据被清空！.")
 
+    def _should_display_message(self, message):
+        """判断一条数据是否满足当前过滤调节"""
+        # 未启用过滤，直接显示
+        if not self.filter_data:
+            return True
+
+        # 没有设置任何过滤调节，直接显示
+        if not self.and_filter_condition and not self.or_filter_condition:
+            return True
+
+        # 判断OR条件过滤
+        or_matched = False
+        for field_index, filter_values in self.or_filter_rules:
+            target_value = message[field_index].strip().lower()
+            if target_value in filter_values:
+                or_matched = True
+                break
+
+        # 判断AND条件过滤
+        and_matched = True
+        for field_index, filter_values in self.and_filter_rules:
+            target_value = message[field_index].strip().lower()
+            if target_value not in filter_values:
+                and_matched = False
+                break
+
+        # 同时存在 AND 和 OR
+        if self.and_filter_rules and self.or_filter_rules:
+            return and_matched or or_matched
+
+        # 只有 OR
+        if self.or_filter_rules:
+            return or_matched
+
+        # 只有 AND
+        if self.and_filter_rules:
+            return and_matched
+
+        return True
+
     def add_new_data(self, message):
         """
         func: 在QTabelView中插入新的数据
         :param message: 数据
         """
-        if not self.filter_data:
+        if self._should_display_message(message):
             self.model.add_message(message)
-        else:
-            # 如果点击的【应用】按钮，但是过滤窗口没有输入任何过滤条件，则同样无需进行后续处理，全部数据都显示
-            if self.and_filter_condition is dict() and self.or_filter_condition is dict():
-                self.model.add_message(message)
-            else:
-                filter_names = ["ZMQ地址", "主题", "通道ID", "数据长度", "源地址", "目的地址", "帧ID", "CID", "CAN数据"]
-                message_dict = dict(zip(filter_names, message[1:]))
 
-                for or_filter_name, or_filter_value in self.or_filter_condition.items():
-                    target_value = message_dict.get(or_filter_name).strip().lower()
-                    if target_value in or_filter_value:  # 只要满足其中一个条件，就显示该数据，后续条件无需再关注，直接判断下一条数据
-                        self.model.add_message(message)
-                        return
+    def add_new_datas(self, messages):
+        """批量接收ConsumerWorker发送的数据"""
 
-                for and_filter_name, and_filter_value in self.and_filter_condition.items():
-                    target_value = message_dict.get(and_filter_name).strip().lower()
-                    if target_value not in and_filter_value:  # 如果有一个条件不满足，则返回，不显示
-                        return
-                # 当所有过滤条件都满足的时候，才显示该数据
-                self.model.add_message(message)
+        display_messages = []
+
+        for message in messages:
+            if self._should_display_message(message):
+                display_messages.append(message)
+
+            if display_messages:
+                self.model.add_messages(display_messages)
 
     def bad_sub_state_update(self, zmq_point):
         """

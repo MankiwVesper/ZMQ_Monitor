@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from collections import deque
 import threading
+from collections import deque
+from datetime import datetime
 
 
 class DataBuffer:
@@ -10,16 +11,16 @@ class DataBuffer:
         self.condition = threading.Condition(self.lock)
         self.max_size = max_size
         self.drop_count = 0
+        self.last_drop_time = None
 
     def put(self, data):
         with self.condition:
             if len(self.buffer) == self.max_size:
                 self.drop_count += 1
+                self.last_drop_time = datetime.now()
 
             self.buffer.append(data)
-
-            # 通知等待数据的消费者线程：现在有数据了
-            self.condition.notify()
+            self.condition.notify()  # 通知等待数据的消费者线程：现在有数据了
 
     def get(self):
         with self.lock:
@@ -35,7 +36,7 @@ class DataBuffer:
 
             if stop_event.is_set():
                 return None
-            
+
             return self.buffer.popleft()
 
     def wake_all(self):
@@ -65,6 +66,17 @@ class DataBuffer:
     def clear(self):
         with self.lock:
             self.buffer.clear()
+            self.drop_count = 0
+            self.last_drop_time = None
 
     def get_drop_count(self):
         return self.drop_count
+
+    def get_status(self):
+        """获取缓存当前状态"""
+        with self.lock:
+            return {
+                "size": len(self.buffer),
+                "max_size": self.max_size,
+                "drop_count": self.drop_count
+            }

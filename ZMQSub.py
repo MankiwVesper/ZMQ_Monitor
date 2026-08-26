@@ -193,12 +193,13 @@ class ZMQSuber:
             zmq_sub_logger.warning(f"ZMQ节点【{addr}】接收数据超时，请检查是否有数据发送到ZMQ总线！")
             return
 
-
-        data_buffer.put({
+        data_buffer.put(
+            {
             'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
             'sub_addr': addr,
             'theme': zmq_message,
-            'message': next_zmq_message})
+            'message': next_zmq_message}
+        )
         
         SubPointStates.good_points.add(addr) if addr not in SubPointStates.good_points else None
         SubPointStates.bad_points.discard(addr)

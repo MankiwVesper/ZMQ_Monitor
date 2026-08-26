@@ -6,8 +6,10 @@ from DataTransform import *
 
 
 class ConsumerWorker(QObject):
-    can_message = pyqtSignal(list)  # 定义信号，用来抛出订阅到的CAN数据
+    can_messages = pyqtSignal(list)  # 定义信号，用来抛出订阅到的CAN数据
     stop_get_message = pyqtSignal()  # 定义停止获取信息的信号
+
+    MAX_BATCH_SIZE = 50     # 一次最多包含50条数据
 
     def __init__(self, buffer):
         super().__init__()
@@ -43,19 +45,40 @@ class ConsumerWorker(QObject):
     def run(self):
         while not self.stop_event.is_set():
             try:
-                message = self.buffer.wait_get(self.stop_event)
-                if message is None:
-                    break  # 如果返回None，说明stop_event被设置了，退出循环
+                # 阻塞等待第一条数据
+                first_message = self.buffer.wait_get(self.stop_event)
+                if first_message is None:
+                    break
 
-                # 将ZMQ总线数据转换为CAN格式的数据，并通过信号发送出去
-                self.can_message.emit(
-                    [
-                        message['time'], 
-                        message['sub_addr'], 
-                        message['theme'].decode('utf-8'), 
-                        *(self._bytes2can(message['message']))
-                    ]
-                )
+                # 保存这一批原始数据
+                raw_messages = [first_message]
+
+                # 第一条已经拿到了，后面的数据只取当前Buffer中已经存在的，不再等待凑满一批
+                while len(raw_messages) < self.MAX_BATCH_SIZE:
+                    message = self.buffer.get()
+                    if message is None:
+                        break
+                    raw_messages.append(message)
+
+                # 保存转换完成、准备发给GUI数据
+                messages = []
+                for message in raw_messages:
+                    try:
+                        messages.append(
+                            [
+                                message['time'],
+                                message['sub_addr'],
+                                message['theme'].decode('utf-8'),
+                                *(self._bytes2can(message['message']))
+                            ]
+                        )
+                    except Exception as e:
+                        print("解析数据出异常：", e)
+
+                # 一次发送这一批数据
+                if messages:
+                    self.can_messages.emit(messages)
+
             except Exception as e:
                 print("获取数据出现异常：", e)
 
